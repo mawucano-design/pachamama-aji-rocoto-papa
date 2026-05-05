@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_313cae48d1330ec42de96cd53143dbda {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+<div style="position: fixed; bottom: 40px; left: 40px; z-index: 1000;
+    background: white; padding: 12px 16px; border-radius: 8px;
+    border: 1px solid #ccc; box-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    font-family: Arial; font-size: 12px; min-width: 200px;">
+  <b style="font-size:13px;">🌶️ Dashboard de Decisión</b>
+  <hr style="margin:6px 0;">
+  <b>Lote Ají Amarillo:</b><br>
+  🟢 Riesgo: BAJO<br>
+  🌱 NDRE Medio: 0.360 (ÓPTIMO)<br>
+  <span style="color:red;">●</span> Puntos Críticos: 5
+  <hr style="margin:6px 0;">
+  <b>Vigor (NDRE):</b><br>
+  <span style="color:#d73027;">■</span> Muy Bajo (< 0.1)
+  <span style="color:#f1c40f;">■</span> Bajo (0.1-0.2)
+  <span style="color:#2ecc71;">■</span> Óptimo (> 0.2)
+  <hr style="margin:6px 0;">
+  <span style="font-size:10px; color:#888;">Datos: Sentinel-2, NASA POWER, CHIRPS</span>
+</div>
+    
+            <div class="folium-map" id="map_313cae48d1330ec42de96cd53143dbda" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_313cae48d1330ec42de96cd53143dbda = L.map(
+                "map_313cae48d1330ec42de96cd53143dbda",
+                {
+                    center: [-13.623929647914876, -76.01341705827245],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 17,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_9750feafdab9a80d8113e890912f67e3 = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_9750feafdab9a80d8113e890912f67e3.addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+            var tile_layer_5364dd9d5894d2e48230eab3c6822129 = L.tileLayer(
+                "https://mt1.google.com/vt/lyrs=y\u0026x={x}\u0026y={y}\u0026z={z}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "Google Hybrid",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_5364dd9d5894d2e48230eab3c6822129.addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+            var tile_layer_3f40e96317a9081062a31e22aa81220d = L.tileLayer(
+                "https://earthengine.googleapis.com/v1/projects/applied-oxygen-459415-e2/maps/3ad99fb456a70eae3bdde620696d3d5a-5cda13f128cefe457b3b63d4a8cecd95/tiles/{z}/{x}/{y}",
+                {
+  "minZoom": 0,
+  "maxZoom": 18,
+  "maxNativeZoom": 18,
+  "noWrap": false,
+  "attribution": "GEE",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_3f40e96317a9081062a31e22aa81220d.addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+            var circle_marker_59d2c79074398db6dacbec114a32d134 = L.circleMarker(
+                [-13.62294242688114, -76.01428699317134],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "white", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_6e00e8fa78c980b9b34b717939923fcc = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_124dc64b1bd9748051903d8a1c1e39fc = $(`<div id="html_124dc64b1bd9748051903d8a1c1e39fc" style="width: 100.0%; height: 100.0%;"><div style='font-family:Arial;'>                         <b>⚠️ Punto Crítico</b><br>                         NDRE: 1.000<br>                         Lat: -13.62294<br>                         Lon: -76.01429<br>                         <a href='https://www.google.com/maps/search/?api=1&query=-13.62294242688114,-76.01428699317134' target='_blank'>Ver en Google Maps</a>                       </div></div>`)[0];
+                popup_6e00e8fa78c980b9b34b717939923fcc.setContent(html_124dc64b1bd9748051903d8a1c1e39fc);
+            
+        
+
+        circle_marker_59d2c79074398db6dacbec114a32d134.bindPopup(popup_6e00e8fa78c980b9b34b717939923fcc)
+        ;
+
+        
+    
+    
+            circle_marker_59d2c79074398db6dacbec114a32d134.bindTooltip(
+                `<div>
+                     Punto Crítico: Lat -13.6229, Lon -76.0143
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_8877888a42b5fc8b97565e9bde897f23 = L.circleMarker(
+                [-13.622760855840541, -76.0144710964709],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "white", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_9d5129c56175c5547781294696dd4ae5 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_d3660296ac172e245c4b0236b960a3c5 = $(`<div id="html_d3660296ac172e245c4b0236b960a3c5" style="width: 100.0%; height: 100.0%;"><div style='font-family:Arial;'>                         <b>⚠️ Punto Crítico</b><br>                         NDRE: 1.000<br>                         Lat: -13.62276<br>                         Lon: -76.01447<br>                         <a href='https://www.google.com/maps/search/?api=1&query=-13.622760855840541,-76.0144710964709' target='_blank'>Ver en Google Maps</a>                       </div></div>`)[0];
+                popup_9d5129c56175c5547781294696dd4ae5.setContent(html_d3660296ac172e245c4b0236b960a3c5);
+            
+        
+
+        circle_marker_8877888a42b5fc8b97565e9bde897f23.bindPopup(popup_9d5129c56175c5547781294696dd4ae5)
+        ;
+
+        
+    
+    
+            circle_marker_8877888a42b5fc8b97565e9bde897f23.bindTooltip(
+                `<div>
+                     Punto Crítico: Lat -13.6228, Lon -76.0145
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_1598db8fdcf61ed4ba6c5be6749a9ae1 = L.circleMarker(
+                [-13.624117360139332, -76.0143844420282],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "white", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_f13909d4af30ca76b4ce0a1ac1e9f084 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_1b410be206b2b390e705762ea5310173 = $(`<div id="html_1b410be206b2b390e705762ea5310173" style="width: 100.0%; height: 100.0%;"><div style='font-family:Arial;'>                         <b>⚠️ Punto Crítico</b><br>                         NDRE: 1.000<br>                         Lat: -13.62412<br>                         Lon: -76.01438<br>                         <a href='https://www.google.com/maps/search/?api=1&query=-13.624117360139332,-76.0143844420282' target='_blank'>Ver en Google Maps</a>                       </div></div>`)[0];
+                popup_f13909d4af30ca76b4ce0a1ac1e9f084.setContent(html_1b410be206b2b390e705762ea5310173);
+            
+        
+
+        circle_marker_1598db8fdcf61ed4ba6c5be6749a9ae1.bindPopup(popup_f13909d4af30ca76b4ce0a1ac1e9f084)
+        ;
+
+        
+    
+    
+            circle_marker_1598db8fdcf61ed4ba6c5be6749a9ae1.bindTooltip(
+                `<div>
+                     Punto Crítico: Lat -13.6241, Lon -76.0144
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_8e7ac14ef191c89228d44b6cbabb574a = L.circleMarker(
+                [-13.623672851987077, -76.01253376467393],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "white", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_a1732fb0eb1a40b28baa51feb9ef0c4b = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_d44fc356e3351e8d057f51438fcd0750 = $(`<div id="html_d44fc356e3351e8d057f51438fcd0750" style="width: 100.0%; height: 100.0%;"><div style='font-family:Arial;'>                         <b>⚠️ Punto Crítico</b><br>                         NDRE: 1.000<br>                         Lat: -13.62367<br>                         Lon: -76.01253<br>                         <a href='https://www.google.com/maps/search/?api=1&query=-13.623672851987077,-76.01253376467393' target='_blank'>Ver en Google Maps</a>                       </div></div>`)[0];
+                popup_a1732fb0eb1a40b28baa51feb9ef0c4b.setContent(html_d44fc356e3351e8d057f51438fcd0750);
+            
+        
+
+        circle_marker_8e7ac14ef191c89228d44b6cbabb574a.bindPopup(popup_a1732fb0eb1a40b28baa51feb9ef0c4b)
+        ;
+
+        
+    
+    
+            circle_marker_8e7ac14ef191c89228d44b6cbabb574a.bindTooltip(
+                `<div>
+                     Punto Crítico: Lat -13.6237, Lon -76.0125
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var circle_marker_abc2c3a88dc1773e489b8e4395980468 = L.circleMarker(
+                [-13.622941672810912, -76.01447186752645],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "white", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 6, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_1bebdaac444afa4a7006620dc09b6752 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_b3424762a7bcbf34e20a9efd0859b688 = $(`<div id="html_b3424762a7bcbf34e20a9efd0859b688" style="width: 100.0%; height: 100.0%;"><div style='font-family:Arial;'>                         <b>⚠️ Punto Crítico</b><br>                         NDRE: 1.000<br>                         Lat: -13.62294<br>                         Lon: -76.01447<br>                         <a href='https://www.google.com/maps/search/?api=1&query=-13.622941672810912,-76.01447186752645' target='_blank'>Ver en Google Maps</a>                       </div></div>`)[0];
+                popup_1bebdaac444afa4a7006620dc09b6752.setContent(html_b3424762a7bcbf34e20a9efd0859b688);
+            
+        
+
+        circle_marker_abc2c3a88dc1773e489b8e4395980468.bindPopup(popup_1bebdaac444afa4a7006620dc09b6752)
+        ;
+
+        
+    
+    
+            circle_marker_abc2c3a88dc1773e489b8e4395980468.bindTooltip(
+                `<div>
+                     Punto Crítico: Lat -13.6229, Lon -76.0145
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var polygon_27ac13bb784cdc64516f321c63d852ab = L.polygon(
+                [[-13.6226945309706, -76.0144867008881], [-13.6238679724011, -76.0120664779377], [-13.6251587579747, -76.0125578565367], [-13.6240733246514, -76.0145527069686], [-13.6238973084369, -76.0146333810669], [-13.6226945309706, -76.0144867008881]],
+                {"bubblingMouseEvents": true, "color": "#2ca02c", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "#2ecc71", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 1.0, "smoothFactor": 1.0, "stroke": true, "weight": 3}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+        var popup_669ee519f7a79188becbbd0a59cea8f9 = L.popup({
+  "maxWidth": 250,
+});
+
+        
+            
+                var html_6213cd42d0f533aa7809dc26e69aa127 = $(`<div id="html_6213cd42d0f533aa7809dc26e69aa127" style="width: 100.0%; height: 100.0%;">     <div style="font-family:Arial; min-width:220px;">       <h4 style="margin:0; color:#2ca02c;">🟢 Lote de Ají Amarillo</h4>       <p style="margin:4px 0; font-size:12px; color:#666;">Lote Real - 4.24 ha</p>       <hr style="margin:6px 0;">       <table style="font-size:13px; width:100%;">         <tr><td>🌿 NDVI</td>      <td><b>0.495</b></td></tr>         <tr><td>🌱 NDRE</td>      <td><b>0.360</b></td></tr>         <tr><td>🌡️ Temperatura</td><td><b>20.3 °C</b></td></tr>         <tr><td>💧 Humedad NDWI</td><td><b>0.249</b></td></tr>         <tr><td>🌧️ Precip 30d</td> <td><b>31.5 mm</b></td></tr>       </table>       <hr style="margin:6px 0;">       <div style="text-align:center; padding:4px; background:#2ca02c;                   color:white; border-radius:4px; font-weight:bold;">         Riesgo BAJO (ÓPTIMO)       </div>     </div>     </div>`)[0];
+                popup_669ee519f7a79188becbbd0a59cea8f9.setContent(html_6213cd42d0f533aa7809dc26e69aa127);
+            
+        
+
+        polygon_27ac13bb784cdc64516f321c63d852ab.bindPopup(popup_669ee519f7a79188becbbd0a59cea8f9)
+        ;
+
+        
+    
+    
+            polygon_27ac13bb784cdc64516f321c63d852ab.bindTooltip(
+                `<div>
+                     🟢 Lote Ají - Riesgo BAJO (NDRE 0.36)
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_fcfc098a8b237d176ec3be2ca0a04d4c = L.marker(
+                [-13.623929647914876, -76.01341705827245],
+                {
+}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+        
+    
+            var div_icon_2179349e93490577e11bb899b839ade7 = L.divIcon({
+  "html": "\n        \u003cdiv style=\"background:white; border:2px solid #2ca02c; border-radius:6px;\n                    padding:3px 8px; font-size:11px; font-weight:bold;\n                    box-shadow:2px 2px 4px rgba(0,0,0,0.3); white-space:nowrap;\"\u003e\n            \ud83d\udfe2 AJ\u00cd AMARILLO\u003cbr\u003e\n            \u003cspan style=\"font-size:10px; color:#555;\"\u003eNDRE 0.36 (\u00d3PTIMO)\u003c/span\u003e\n        \u003c/div\u003e",
+  "iconSize": [160, 35],
+  "iconAnchor": [80, 17],
+  "className": "empty",
+});
+        
+    
+                marker_fcfc098a8b237d176ec3be2ca0a04d4c.setIcon(div_icon_2179349e93490577e11bb899b839ade7);
+            
+    
+            var layer_control_8d1ed4350f58822d06e02a4e7309330a_layers = {
+                base_layers : {
+                    "openstreetmap" : tile_layer_9750feafdab9a80d8113e890912f67e3,
+                    "Google Hybrid" : tile_layer_5364dd9d5894d2e48230eab3c6822129,
+                },
+                overlays :  {
+                    "NDRE (Decisi\u00f3n)" : tile_layer_3f40e96317a9081062a31e22aa81220d,
+                },
+            };
+            let layer_control_8d1ed4350f58822d06e02a4e7309330a = L.control.layers(
+                layer_control_8d1ed4350f58822d06e02a4e7309330a_layers.base_layers,
+                layer_control_8d1ed4350f58822d06e02a4e7309330a_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_313cae48d1330ec42de96cd53143dbda);
+
+        
+</script>
+</html>
