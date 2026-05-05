@@ -1,0 +1,72 @@
+{
+  "1": {
+    "ndvi_val": 0.236,
+    "temp_val": 20.4,
+    "humedad_val": 0.372,
+    "precip_actual": 0.0,
+    "ndre_val": 0.15
+  },
+  "2": {
+    "ndvi_val": 0.267,
+    "temp_val": 13.8,
+    "humedad_val": 0.38,
+    "precip_actual": 108.0,
+    "ndre_val": 0.156
+  },
+  "3": {
+    "ndvi_val": 0.185,
+    "temp_val": 13.8,
+    "humedad_val": 0.416,
+    "precip_actual": 0.0,
+    "ndre_val": 0.088
+  },
+  "4": {
+    "ndvi_val": 0.163,
+    "temp_val": 13.8,
+    "humedad_val": 0.426,
+    "precip_actual": 0.0,
+    "ndre_val": 0.07
+  },
+  "5": {
+    "ndvi_val": 0.197,
+    "temp_val": 19.4,
+    "humedad_val": 0.369,
+    "precip_actual": 55.9,
+    "ndre_val": 0.099
+  },
+  "6": {
+    "ndvi_val": 0.518,
+    "temp_val": 18.3,
+    "humedad_val": 0.238,
+    "precip_actual": 0.0,
+    "ndre_val": 0.309
+  },
+  "7": {
+    "ndvi_val": 0.601,
+    "temp_val": 7.8,
+    "humedad_val": 0.21,
+    "precip_actual": 0.0,
+    "ndre_val": 0.329
+  },
+  "8": {
+    "ndvi_val": 0.379,
+    "temp_val": 13.8,
+    "humedad_val": 0.318,
+    "precip_actual": 0.0,
+    "ndre_val": 0.236
+  },
+  "9": {
+    "ndvi_val": 0.481,
+    "temp_val": 13.8,
+    "humedad_val": 0.275,
+    "precip_actual": 0.0,
+    "ndre_val": 0.324
+  },
+  "10": {
+    "ndvi_val": 0.747,
+    "temp_val": 7.8,
+    "humedad_val": 0.17,
+    "precip_actual": 0.0,
+    "ndre_val": 0.434
+  }
+}
