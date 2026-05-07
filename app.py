@@ -93,7 +93,6 @@ except ImportError:
     XARRAY_OK = False
 
 # DEM vía API REST — siempre disponible porque requests está importado
-# Definimos la variable ANTES de cualquier uso
 OPENTOPOGRAPHY_AVAILABLE = True
 
 try:
@@ -534,11 +533,10 @@ def consultar_groq(prompt, max_tokens=700, model="llama-3.3-70b-versatile"):
 def generar_alerta_detallada(fase, ndvi, temp, precip_actual, humedad,
                               cultivo, umbrales, pronostico_gfs=None,
                               datos_estacion=None):
-    """Genera alerta detallada usando contexto de invernadero y datos de estación."""
     estacion_bloque = ""
     if datos_estacion:
         estacion_bloque = f"""
-DATOS DE ESTACIÓN METEOROLÓGICA (Simulada):
+DATOS DE ESTACIÓN METEOROLÓGICA:
 - Temperatura exterior: {datos_estacion.get('temp_exterior', 0):.1f}°C
 - Humedad exterior: {datos_estacion.get('humedad_exterior', 0):.1f}%
 - Radiación solar: {datos_estacion.get('radiacion_solar', 0):.0f} W/m²
@@ -547,7 +545,6 @@ DATOS DE ESTACIÓN METEOROLÓGICA (Simulada):
 - Materia orgánica del suelo: {datos_estacion.get('materia_organica', 0):.1f}%
 - Fertilidad del suelo (N-P-K): N={datos_estacion.get('nitrogeno', 0)} mg/kg, P={datos_estacion.get('fosforo', 0)} mg/kg, K={datos_estacion.get('potasio', 0)} mg/kg
 """
-
     gfs_bloque = ""
     if pronostico_gfs:
         gfs_bloque = f"""
@@ -556,7 +553,6 @@ Pronóstico GFS próxima semana:
 - Precipitación acumulada: {pronostico_gfs['precip_acum']:.0f} mm
 - Alerta principal: {pronostico_gfs['alerta_esta_semana']}
 """
-
     prompt = f"""
 Eres un agrónomo experto en cultivo de {cultivo} bajo invernadero.
 
@@ -579,22 +575,16 @@ INSTRUCCIONES:
 # DATOS DE ESTACIÓN METEOROLÓGICA (SIMULADA)
 # ============================================================
 def obtener_datos_estacion_simulada():
-    """Genera datos simulados de una estación meteorológica."""
     np.random.seed(int(datetime.now().timestamp()) % 10000)
-    
-    # Datos climáticos simulados
     temp_exterior = round(np.random.uniform(15, 30), 1)
     humedad_exterior = round(np.random.uniform(40, 90), 1)
     radiacion_solar = round(np.random.uniform(200, 1000), 0)
     viento = round(np.random.uniform(0, 20), 1)
-    
-    # Datos de suelo simulados
     ph_suelo = round(np.random.uniform(5.5, 7.5), 1)
     materia_organica = round(np.random.uniform(1.5, 4.0), 1)
     nitrogeno = round(np.random.uniform(20, 100), 0)
     fosforo = round(np.random.uniform(10, 60), 0)
     potasio = round(np.random.uniform(50, 200), 0)
-    
     return {
         'temp_exterior': temp_exterior,
         'humedad_exterior': humedad_exterior,
@@ -684,7 +674,6 @@ def generar_mapa_folium_dem(gdf, dem, dataset_label):
     bounds = gdf.total_bounds
     centro_lat, centro_lon, zoom = obtener_zoom_con_margen(bounds)
     mapa = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom, control_scale=True)
-
     folium.GeoJson(
         gdf.__geo_interface__, name="Parcela",
         style_function=lambda x: {"color": "yellow", "weight": 3, "fillOpacity": 0.05},
@@ -693,7 +682,6 @@ def generar_mapa_folium_dem(gdf, dem, dataset_label):
         "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         attr="Google", name="Google Hybrid", overlay=False, control=True,
     ).add_to(mapa)
-
     if dem is not None and PILLOW_OK:
         try:
             from matplotlib.colors import LinearSegmentedColormap as LSC
@@ -709,7 +697,6 @@ def generar_mapa_folium_dem(gdf, dem, dataset_label):
             ).add_to(mapa)
         except Exception as e:
             st.warning(f"No se pudo añadir DEM como overlay: {e}")
-
     folium.LayerControl(collapsed=False).add_to(mapa)
     Fullscreen().add_to(mapa)
     return mapa
@@ -865,7 +852,6 @@ class CalculadorCarbono:
         'acum_hojarasca': 2.0,
         'tasa_soc':       1.5,
     }
-
     def calcular_carbono_hectarea(self, ndvi: float, precip_anual: float) -> dict:
         factor_clim = min(1.6, max(0.7, precip_anual / 1200))
         if   ndvi > 0.70: agb = (15 + (ndvi - 0.70) * 80) * factor_clim
@@ -873,16 +859,13 @@ class CalculadorCarbono:
         elif ndvi > 0.30: agb = ( 4 + (ndvi - 0.30) * 40) * factor_clim
         else:             agb = ( 2 + ndvi * 20)            * factor_clim
         agb = round(min(45, max(3, agb)), 2)
-
         C_agb = round(agb * self.FACTORES['fc_carbono'], 3)
         C_bgb = round(C_agb * self.FACTORES['ratio_bgb'] * 0.6, 3)
         C_dw  = round(C_agb * self.FACTORES['prop_dw'], 3)
         C_li  = round(self.FACTORES['acum_hojarasca'] * 0.4 * self.FACTORES['fc_carbono'], 3)
         C_soc = round(self.FACTORES['tasa_soc'] * (0.8 + factor_clim * 0.2), 3)
-
         total = round(C_agb + C_bgb + C_dw + C_li + C_soc, 2)
         co2e  = round(total * self.FACTORES['ratio_co2'], 2)
-
         return {
             'carbono_total_ton_ha': total,
             'co2_equivalente_ton_ha': co2e,
@@ -993,7 +976,11 @@ centroid_geom = gdf.geometry.centroid.iloc[0]
 _lat = centroid_geom.y
 _lon = centroid_geom.x
 pronostico_gfs = obtener_pronostico_gfs_simple(_lat, _lon, dias=7)
-datos_estacion = obtener_datos_estacion_simulada()
+
+# Inicializar datos de estación en sesión
+if 'datos_estacion' not in st.session_state:
+    st.session_state['datos_estacion'] = obtener_datos_estacion_simulada()
+    st.session_state['modo_estacion'] = "Automática (simulada)"
 
 # ============================================================
 # PESTAÑAS — 10 en total
@@ -1018,7 +1005,6 @@ datos_estacion = obtener_datos_estacion_simulada()
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
-
     col1, col2, col3, col4, col5 = st.columns(5)
     u = UMBRALES[cultivo]
     with col1:
@@ -1031,12 +1017,9 @@ with tab_dashboard:
         st.metric("📅 Fase fenológica", fase_fenologica.capitalize())
     with col5:
         st.metric("🌧️ Precipitación", f"{precip_actual:.1f} mm")
-
     st.markdown("---")
-
     st.subheader("🌤️ Pronóstico GFS — Próximos 7 días")
     st.warning(f"**Alerta esta semana:** {pronostico_gfs['alerta_esta_semana']}")
-
     col_gfs1, col_gfs2 = st.columns(2)
     with col_gfs1:
         fig_t, ax_t = plt.subplots(figsize=(6, 3))
@@ -1044,23 +1027,15 @@ with tab_dashboard:
                   'r-o', markersize=5, linewidth=2, label='T° máx proyectada')
         ax_t.axhline(u['temp_max'], color='orange', linestyle='--', label=f"Umbral {cultivo} ({u['temp_max']}°C)")
         ax_t.set_title('Temperatura proyectada vs umbral')
-        ax_t.set_ylabel('°C')
-        ax_t.legend(fontsize=8)
-        ax_t.tick_params(axis='x', rotation=30)
-        plt.tight_layout()
-        st.pyplot(fig_t)
+        ax_t.set_ylabel('°C'); ax_t.legend(fontsize=8); ax_t.tick_params(axis='x', rotation=30)
+        plt.tight_layout(); st.pyplot(fig_t)
     with col_gfs2:
         fig_p, ax_p = plt.subplots(figsize=(6, 3))
-        ax_p.bar(pronostico_gfs['fechas'], pronostico_gfs['precip_diaria'],
-                 color='steelblue', alpha=0.8)
+        ax_p.bar(pronostico_gfs['fechas'], pronostico_gfs['precip_diaria'], color='steelblue', alpha=0.8)
         ax_p.set_title('Precipitación proyectada (mm/día)')
-        ax_p.set_ylabel('mm')
-        ax_p.tick_params(axis='x', rotation=30)
-        plt.tight_layout()
-        st.pyplot(fig_p)
-
+        ax_p.set_ylabel('mm'); ax_p.tick_params(axis='x', rotation=30)
+        plt.tight_layout(); st.pyplot(fig_p)
     st.markdown("---")
-
     st.subheader("Evolución de Índices Históricos")
     if not df_ndvi.empty and not df_temp.empty and not df_precip.empty:
         fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
@@ -1073,8 +1048,7 @@ with tab_dashboard:
         axes[1].set_ylabel('Temperatura (°C)')
         axes[2].bar(df_precip['date'], df_precip['precip'], color='cyan')
         axes[2].set_ylabel('Precipitación (mm)')
-        plt.tight_layout()
-        st.pyplot(fig)
+        plt.tight_layout(); st.pyplot(fig)
     else:
         st.info("Datos históricos no disponibles. Mostrando simulación.")
         fechas_sim = pd.date_range(start=fecha_inicio, end=fecha_fin, freq='D')
@@ -1090,8 +1064,7 @@ with tab_dashboard:
         axes[1].set_ylabel('Temp (simulada)')
         axes[2].bar(fechas_sim, precip_sim, color='cyan')
         axes[2].set_ylabel('Precip (simulada)')
-        plt.tight_layout()
-        st.pyplot(fig)
+        plt.tight_layout(); st.pyplot(fig)
 
 # ============================================================
 # MAPA DE RIESGO
@@ -1099,20 +1072,15 @@ with tab_dashboard:
 with tab_mapas:
     st.header("🗺️ Mapa de Riesgo Climático Interactivo")
     st.markdown("Seleccioná el índice, el fondo y visualizá la imagen satelital con puntos críticos.")
-
     if not FOLIUM_OK:
         st.error("❌ folium no instalado. Agregá `folium` y `streamlit-folium` a requirements.txt.")
     else:
         col_idx, col_fondo = st.columns([2, 1])
         with col_idx:
-            indice = st.selectbox("Índice a visualizar",
-                                  ["NDVI","NDRE","NDWI","Temperatura","Precipitación"],
-                                  help="NDRE detecta estrés en clorofila antes que el NDVI")
+            indice = st.selectbox("Índice a visualizar", ["NDVI","NDRE","NDWI","Temperatura","Precipitación"])
         with col_fondo:
             fondo = st.radio("Fondo", ["Google Hybrid","Esri Satellite"], horizontal=True)
-
         gee_ok_map = st.session_state.get("gee_authenticated", False) and usar_gee and GEE_AVAILABLE
-
         if indice == "NDVI":
             vis = {'min':0.0,'max':0.8,'palette':['#d73027','#f46d43','#fdae61','#fee08b','#d9ef8b','#a6d96a','#66bd63','#1a9850']}
             umbral_critico = UMBRALES[cultivo].get('NDVI_min', 0.3)
@@ -1136,11 +1104,9 @@ with tab_mapas:
             vis = None; umbral_critico = 1.0
             leyenda = [("#f0f9e8","Seco (<5 mm)"),("#7bccc4","Moderado"),("#084081","Lluvioso (>20 mm)")]
             unidad = " mm"; mean_val_map = precip_actual
-
         riesgo_map, riesgo_emoji_map = determinar_riesgo(indice, mean_val_map, cultivo, UMBRALES[cultivo])
         critical_coords = []
         tile_url = None
-
         if gee_ok_map:
             with st.spinner(f"⏳ Cargando capa {indice} desde GEE…"):
                 try:
@@ -1154,108 +1120,49 @@ with tab_mapas:
                         image, vis = get_temperature_image(gdf, fecha_fin)
                     else:
                         image, vis = get_precipitation_image(gdf, fecha_fin)
-
                     geom_raw = gdf.geometry.iloc[0]
                     if geom_raw.geom_type == 'MultiPolygon':
                         geom_raw = max(geom_raw.geoms, key=lambda p: p.area)
                     poly_coords_ee = [[c[0], c[1]] for c in geom_raw.exterior.coords]
                     polygon_geom = ee.Geometry.Polygon(poly_coords_ee)
-
                     _v = get_mean_value(image, polygon_geom)
                     if _v is not None: mean_val_map = _v
                     riesgo_map, riesgo_emoji_map = determinar_riesgo(indice, mean_val_map, cultivo, UMBRALES[cultivo])
-
                     if umbral_critico is not None:
                         critical_coords = get_critical_points(image, polygon_geom, umbral_critico, 20)
-
                     if vis:
                         tile_url = obtener_tile_url_gee(image, vis)
                 except Exception as _e:
                     st.warning(f"⚠️ Error cargando capa GEE: {_e}")
-
         num_criticos = len(critical_coords)
-
         bounds = gdf.total_bounds
         c_lat, c_lon, zoom = obtener_zoom_con_margen(bounds)
         mapa = folium.Map(location=[c_lat, c_lon], zoom_start=zoom, control_scale=True, tiles=None)
-
-        folium.TileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                         attr='OpenStreetMap', name='OpenStreetMap').add_to(mapa)
+        folium.TileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', attr='OpenStreetMap', name='OpenStreetMap').add_to(mapa)
         if fondo == "Google Hybrid":
-            folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-                             attr='Google Hybrid', name='Google Hybrid').add_to(mapa)
+            folium.TileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google Hybrid', name='Google Hybrid').add_to(mapa)
         else:
-            folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                             attr='Esri World Imagery', name='Esri Satellite').add_to(mapa)
-
+            folium.TileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr='Esri World Imagery', name='Esri Satellite').add_to(mapa)
         if tile_url:
-            folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2',
-                             name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
-
+            folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2', name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
-        popup_poly_html = (
-            f'<div style="font-family:Arial;min-width:210px;">'
-            f'<h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4>'
-            f'<p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p>'
-            f'<hr style="margin:6px 0;">'
-            f'<table style="font-size:13px;width:100%;">'
-            f'<tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr>'
-            f'<tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr>'
-            f'<tr><td>Puntos críticos</b></td><td><b>{num_criticos}</b></td></tr>'
-            f'</table>'
-            f'<hr style="margin:6px 0;">'
-            f'<div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div>'
-            f'</div>'
-        )
+        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
         folium.GeoJson(gdf.__geo_interface__, name='Parcela',
                        style_function=lambda x: {'color':'#2ca02c','weight':3,'dashArray':'6','fillColor':'#2ca02c','fillOpacity':0.15},
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
                        popup=folium.Popup(popup_poly_html, max_width=250)).add_to(mapa)
-
         for lon_pt, lat_pt in critical_coords:
-            popup_pt = (f'<div style="font-family:Arial;"><b>⚠️ Punto Crítico</b><br>'
-                        f'{indice}: bajo umbral<br>Lat:{lat_pt:.5f}<br>Lon:{lon_pt:.5f}<br>'
-                        f'<a href="https://www.google.com/maps/search/?api=1&query={lat_pt},{lon_pt}" target="_blank">📍 Google Maps</a></div>')
-            folium.CircleMarker(location=[lat_pt, lon_pt], radius=6, color='red', weight=3,
-                                fill=True, fill_color='white', fill_opacity=0.2,
-                                popup=folium.Popup(popup_pt, max_width='100%'),
-                                tooltip=f'Crítico: {lat_pt:.4f},{lon_pt:.4f}').add_to(mapa)
-
-        clat_m = gdf.geometry.centroid.y.iloc[0]
-        clon_m = gdf.geometry.centroid.x.iloc[0]
+            popup_pt = f'<div style="font-family:Arial;"><b>⚠️ Punto Crítico</b><br>{indice}: bajo umbral<br>Lat:{lat_pt:.5f}<br>Lon:{lon_pt:.5f}<br><a href="https://www.google.com/maps/search/?api=1&query={lat_pt},{lon_pt}" target="_blank">📍 Google Maps</a></div>'
+            folium.CircleMarker(location=[lat_pt, lon_pt], radius=6, color='red', weight=3, fill=True, fill_color='white', fill_opacity=0.2, popup=folium.Popup(popup_pt, max_width='100%'), tooltip=f'Crítico: {lat_pt:.4f},{lon_pt:.4f}').add_to(mapa)
+        clat_m = gdf.geometry.centroid.y.iloc[0]; clon_m = gdf.geometry.centroid.x.iloc[0]
         gee_badge = "🛰️ GEE" if gee_ok_map and tile_url else "🗺️ OSM"
-        label_html = (
-            f'<div style="background:white;border:2px solid #2ca02c;border-radius:6px;'
-            f'padding:3px 8px;font-size:11px;font-weight:bold;box-shadow:2px 2px 4px rgba(0,0,0,0.3);white-space:nowrap;">'
-            f'{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo} · {gee_badge}<br>'
-            f'<span style="font-size:10px;color:#555;">{indice}: {mean_val_map:.3f} | Riesgo {riesgo_map}</span></div>'
-        )
-        folium.Marker(location=[clat_m, clon_m],
-                      icon=folium.DivIcon(html=label_html, icon_size=(240,35), icon_anchor=(120,17))).add_to(mapa)
-
+        label_html = f'<div style="background:white;border:2px solid #2ca02c;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:bold;box-shadow:2px 2px 4px rgba(0,0,0,0.3);white-space:nowrap;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo} · {gee_badge}<br><span style="font-size:10px;color:#555;">{indice}: {mean_val_map:.3f} | Riesgo {riesgo_map}</span></div>'
+        folium.Marker(location=[clat_m, clon_m], icon=folium.DivIcon(html=label_html, icon_size=(240,35), icon_anchor=(120,17))).add_to(mapa)
         leyenda_html = "".join(f'<span style="color:{c};">■</span> {txt}&nbsp;&nbsp;' for c, txt in leyenda)
-        panel_html = (
-            f'<div style="position:fixed;bottom:40px;left:40px;z-index:1000;background:white;'
-            f'padding:12px 16px;border-radius:8px;border:1px solid #ccc;'
-            f'box-shadow:2px 2px 8px rgba(0,0,0,0.2);font-family:Arial;font-size:12px;min-width:190px;">'
-            f'<b style="font-size:13px;">{ICONOS[cultivo]} {cultivo}</b>'
-            f'<hr style="margin:6px 0;">'
-            f'<b>Riesgo:</b> <span style="color:{riesgo_color};">● {riesgo_map}</span><br>'
-            f'<b>{indice}:</b> {mean_val_map:.3f}{unidad}<br>'
-            + (f'<b>NDRE:</b> {ndre_val:.3f}<br>' if ndre_val is not None else '')
-            + f'<b>Área:</b> {area_ha:.2f} ha<br>'
-            f'<b>Puntos críticos:</b> {num_criticos}<br>'
-            f'<hr style="margin:6px 0;">'
-            f'{leyenda_html}'
-            f'<hr style="margin:6px 0;">'
-            f'<span style="font-size:10px;color:#888;">{"Sentinel-2 · ERA5 · CHIRPS" if gee_ok_map else "OpenStreetMap · valores por defecto"}</span>'
-            f'</div>'
-        )
+        panel_html = f'<div style="position:fixed;bottom:40px;left:40px;z-index:1000;background:white;padding:12px 16px;border-radius:8px;border:1px solid #ccc;box-shadow:2px 2px 8px rgba(0,0,0,0.2);font-family:Arial;font-size:12px;min-width:190px;"><b style="font-size:13px;">{ICONOS[cultivo]} {cultivo}</b><hr style="margin:6px 0;"><b>Riesgo:</b> <span style="color:{riesgo_color};">● {riesgo_map}</span><br><b>{indice}:</b> {mean_val_map:.3f}{unidad}<br>' + (f'<b>NDRE:</b> {ndre_val:.3f}<br>' if ndre_val is not None else '') + f'<b>Área:</b> {area_ha:.2f} ha<br><b>Puntos críticos:</b> {num_criticos}<br><hr style="margin:6px 0;">{leyenda_html}<hr style="margin:6px 0;"><span style="font-size:10px;color:#888;">{"Sentinel-2 · ERA5 · CHIRPS" if gee_ok_map else "OpenStreetMap · valores por defecto"}</span></div>'
         Element(panel_html).add_to(mapa)
         folium.LayerControl(collapsed=False).add_to(mapa)
-
         components.html(mapa.get_root().render(), height=650)
-
         if not gee_ok_map:
             st.info("🗺️ Mapa base activo. Autenticá GEE en el panel lateral para agregar capas satelitales Sentinel-2.")
 
@@ -1267,16 +1174,15 @@ with tab_monitoreo:
     col1, col2 = st.columns(2)
     umbral = UMBRALES[cultivo]
     with col1:
-        st.metric("NDVI",              f"{ndvi_val:.2f}")
-        st.metric("Temperatura",       f"{temp_val:.1f} °C")
-        st.metric("Humedad suelo",     f"{humedad_val:.2f}")
-        st.metric("Precipitación rec.",f"{precip_actual:.1f} mm")
+        st.metric("NDVI", f"{ndvi_val:.2f}")
+        st.metric("Temperatura", f"{temp_val:.1f} °C")
+        st.metric("Humedad suelo", f"{humedad_val:.2f}")
+        st.metric("Precipitación rec.", f"{precip_actual:.1f} mm")
     with col2:
         st.subheader("Comparativa con Umbrales")
         st.write(f"**NDVI:** {'🟢' if ndvi_val > umbral['NDVI_min'] else '🔴'} Mínimo {umbral['NDVI_min']}")
         st.write(f"**Temperatura:** {'🟢' if umbral['temp_min']<=temp_val<=umbral['temp_max'] else '🔴'} Rango {umbral['temp_min']}-{umbral['temp_max']} °C")
         st.write(f"**Humedad:** {'🟢' if umbral['humedad_min']<=humedad_val<=umbral['humedad_max'] else '🔴'} Rango {umbral['humedad_min']:.2f}-{umbral['humedad_max']:.2f}")
-
     if not df_ndvi.empty:
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(df_ndvi['date'], df_ndvi['ndvi'], 'g-o', markersize=3, label='NDVI')
@@ -1289,80 +1195,167 @@ with tab_monitoreo:
 # ============================================================
 with tab_alerta:
     st.header("⚠️ Alertas IA con Datos de Invernadero")
-
     with st.expander("📋 Datos que se enviarán a la IA", expanded=False):
         st.write(f"**Cultivo:** {cultivo} - Fase: {fase_fenologica}")
         st.write(f"**NDVI:** {ndvi_val:.2f}")
         st.write(f"**Temperatura:** {temp_val:.1f}°C")
         st.write(f"**Humedad:** {humedad_val:.2f}")
         st.write(f"**Precipitación:** {precip_actual:.1f} mm")
-        st.write("**Datos de Estación Meteorológica (Simulada):**")
-        st.write(datos_estacion)
-
+        st.write("**Datos de Estación Meteorológica (activos):**")
+        st.write(st.session_state['datos_estacion'])
     if st.button("🤖 Generar Alerta Avanzada", type="primary"):
         with st.spinner("Consultando IA (Groq) con datos de invernadero..."):
             alerta = generar_alerta_detallada(
                 fase_fenologica, ndvi_val, temp_val, precip_actual, humedad_val,
                 cultivo, UMBRALES[cultivo],
                 pronostico_gfs=pronostico_gfs,
-                datos_estacion=datos_estacion,
+                datos_estacion=st.session_state['datos_estacion'],
             )
-
         st.markdown("### 🔔 Alerta Agronómica Integrada")
         st.markdown(alerta)
-
         st.markdown("---")
         st.markdown(f"**🌤️ Pronóstico próxima semana:** {pronostico_gfs['alerta_esta_semana']}")
-
         fecha_str = datetime.now().strftime('%Y%m%d_%H%M')
-        texto_descarga = (
-            f"ALERTA — {cultivo} — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-            f"{'='*60}\n\n{alerta}\n\n"
-            f"{'='*60}\n"
-            f"Datos de Estación: {datos_estacion}\n"
-            f"Pronóstico semana: {pronostico_gfs['alerta_esta_semana']}\n"
-        )
-        st.download_button("📥 Descargar alerta completa",
-                           data=texto_descarga,
-                           file_name=f"alerta_{cultivo}_{fecha_str}.txt")
+        texto_descarga = f"ALERTA — {cultivo} — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n{'='*60}\n\n{alerta}\n\n{'='*60}\nDatos de Estación: {st.session_state['datos_estacion']}\nPronóstico semana: {pronostico_gfs['alerta_esta_semana']}\n"
+        st.download_button("📥 Descargar alerta completa", data=texto_descarga, file_name=f"alerta_{cultivo}_{fecha_str}.txt")
 
 # ============================================================
-# ESTACIÓN METEOROLÓGICA (NUEVA PESTAÑA)
+# ESTACIÓN METEOROLÓGICA (MODIFICADA con carga manual y remota)
 # ============================================================
 with tab_estacion:
     st.header("🌦️ Datos de Estación Meteorológica")
-    st.markdown("Datos simulados de una estación meteorológica para el monitoreo del invernadero.")
+    st.markdown("Puedes cargar los datos de tu estación de forma **manual** o **automática** (simulada o vía API).")
 
-    if st.button("🔄 Actualizar Datos Simulados"):
-        datos_estacion = obtener_datos_estacion_simulada()
-        st.session_state['datos_estacion'] = datos_estacion
-        st.rerun()
+    modo = st.radio(
+        "Origen de los datos",
+        ["Manual", "Automática (simulada)", "Conectar a API externa (placeholder)"],
+        index=0 if st.session_state.get('modo_estacion') == "Manual" else (1 if st.session_state.get('modo_estacion') == "Automática (simulada)" else 2),
+        horizontal=True
+    )
+    st.session_state['modo_estacion'] = modo
 
-    # Usar datos de sesión o generar nuevos
-    if 'datos_estacion' not in st.session_state:
-        st.session_state['datos_estacion'] = datos_estacion
+    if modo == "Manual":
+        st.subheader("✍️ Ingreso manual de datos")
+        with st.form("form_manual_estacion"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                temp_ext = st.number_input("🌡️ Temperatura exterior (°C)", value=st.session_state['datos_estacion'].get('temp_exterior',22.0), step=0.5)
+                hum_ext = st.number_input("💧 Humedad exterior (%)", value=st.session_state['datos_estacion'].get('humedad_exterior',65.0), step=1.0)
+                rad = st.number_input("☀️ Radiación solar (W/m²)", value=st.session_state['datos_estacion'].get('radiacion_solar',500), step=10)
+            with col2:
+                viento = st.number_input("💨 Velocidad del viento (km/h)", value=st.session_state['datos_estacion'].get('viento',10.0), step=1.0)
+                ph = st.number_input("🧪 pH del suelo", value=st.session_state['datos_estacion'].get('ph_suelo',6.5), step=0.1)
+                mo = st.number_input("🌱 Materia orgánica (%)", value=st.session_state['datos_estacion'].get('materia_organica',2.5), step=0.1)
+            with col3:
+                n = st.number_input("Nitrógeno (mg/kg)", value=st.session_state['datos_estacion'].get('nitrogeno',60), step=5)
+                p = st.number_input("Fósforo (mg/kg)", value=st.session_state['datos_estacion'].get('fosforo',35), step=5)
+                k = st.number_input("Potasio (mg/kg)", value=st.session_state['datos_estacion'].get('potasio',120), step=10)
+            submitted = st.form_submit_button("📥 Cargar datos manuales")
+            if submitted:
+                st.session_state['datos_estacion'] = {
+                    'temp_exterior': temp_ext, 'humedad_exterior': hum_ext,
+                    'radiacion_solar': rad, 'viento': viento,
+                    'ph_suelo': ph, 'materia_organica': mo,
+                    'nitrogeno': n, 'fosforo': p, 'potasio': k,
+                }
+                st.success("✅ Datos manuales cargados correctamente.")
+                st.rerun()
+        # Mostrar datos actuales
+        estacion_data = st.session_state['datos_estacion']
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
+            st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
+        with col2:
+            st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
+            st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
+        with col3:
+            st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
+            st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
+        st.subheader("🧪 Fertilidad del Suelo")
+        col_n, col_p, col_k = st.columns(3)
+        with col_n:
+            st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
+        with col_p:
+            st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
+        with col_k:
+            st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
 
-    estacion_data = st.session_state['datos_estacion']
+    elif modo == "Automática (simulada)":
+        st.subheader("🔄 Datos simulados (estación virtual)")
+        if st.button("🔄 Generar nueva simulación"):
+            st.session_state['datos_estacion'] = obtener_datos_estacion_simulada()
+            st.rerun()
+        estacion_data = st.session_state['datos_estacion']
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
+            st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
+        with col2:
+            st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
+            st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
+        with col3:
+            st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
+            st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
+        st.subheader("🧪 Fertilidad del Suelo")
+        col_n, col_p, col_k = st.columns(3)
+        with col_n:
+            st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
+        with col_p:
+            st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
+        with col_k:
+            st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
+        st.info("ℹ️ Estos datos se generan aleatoriamente cada vez que presionas el botón. Representan valores típicos para la costa peruana.")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
-        st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
-    with col2:
-        st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
-        st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
-    with col3:
-        st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
-        st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
-
-    st.subheader("🧪 Análisis de Fertilidad del Suelo")
-    col_n, col_p, col_k = st.columns(3)
-    with col_n:
-        st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
-    with col_p:
-        st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
-    with col_k:
-        st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
+    else:  # Conectar a API externa
+        st.subheader("🔌 Conexión a estación automática real (vía API)")
+        st.markdown("Configura la URL y la clave de acceso para obtener datos en tiempo real.")
+        with st.form("form_api_estacion"):
+            api_url = st.text_input("URL de la API (ej: https://tu-estacion.com/api/actual)", value=st.session_state.get('api_url', ''))
+            api_key = st.text_input("Clave API (opcional)", type="password", value=st.session_state.get('api_key', ''))
+            submitted_api = st.form_submit_button("🌐 Conectar y obtener datos")
+            if submitted_api:
+                st.session_state['api_url'] = api_url
+                st.session_state['api_key'] = api_key
+                try:
+                    # Aquí iría la lógica real de consulta a la API.
+                    # Por ahora simulamos una respuesta.
+                    import random
+                    st.session_state['datos_estacion'] = {
+                        'temp_exterior': round(random.uniform(18, 28), 1),
+                        'humedad_exterior': round(random.uniform(50, 85), 1),
+                        'radiacion_solar': round(random.uniform(300, 900), 0),
+                        'viento': round(random.uniform(2, 18), 1),
+                        'ph_suelo': round(random.uniform(6.0, 7.2), 1),
+                        'materia_organica': round(random.uniform(2.0, 3.8), 1),
+                        'nitrogeno': round(random.uniform(40, 90), 0),
+                        'fosforo': round(random.uniform(20, 50), 0),
+                        'potasio': round(random.uniform(80, 160), 0),
+                    }
+                    st.success("✅ Datos obtenidos correctamente (simulación). Reemplazar con API real.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error conectando a la API: {e}")
+        if 'datos_estacion' in st.session_state:
+            estacion_data = st.session_state['datos_estacion']
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
+                st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
+            with col2:
+                st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
+                st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
+            with col3:
+                st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
+                st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
+            st.subheader("🧪 Fertilidad del Suelo")
+            col_n, col_p, col_k = st.columns(3)
+            with col_n:
+                st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
+            with col_p:
+                st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
+            with col_k:
+                st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
 
     st.markdown("---")
     st.subheader("📈 Interpretación de Datos")
@@ -1373,15 +1366,9 @@ with tab_estacion:
     - **Materia Orgánica:** Mejorar la estructura del suelo y retención de agua.
     - **Fertilidad:** Ajustar fertilización según deficiencias de N-P-K.
     """)
-
     if st.button("📥 Exportar Datos de Estación"):
-        df_estacion = pd.DataFrame([estacion_data])
-        st.download_button(
-            "⬇️ Descargar CSV",
-            data=df_estacion.to_csv(index=False),
-            file_name=f"estacion_meteorologica_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv",
-        )
+        df_estacion = pd.DataFrame([st.session_state['datos_estacion']])
+        st.download_button("⬇️ Descargar CSV", data=df_estacion.to_csv(index=False), file_name=f"estacion_meteorologica_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", mime="text/csv")
 
 # ============================================================
 # EXPORTAR
@@ -1392,18 +1379,8 @@ with tab_export:
         st.download_button("⬇️ Descargar GeoJSON", data=gdf.to_json(), file_name="parcela.geojson")
     if not df_ndvi.empty:
         st.download_button("⬇️ Serie NDVI CSV", data=df_ndvi.to_csv(index=False), file_name="ndvi.csv")
-    resumen = (
-        f"RESUMEN — {cultivo} — {datetime.now().strftime('%Y-%m-%d')}\n"
-        f"NDVI: {ndvi_val:.2f}\n"
-        f"Temperatura: {temp_val:.1f}°C\n"
-        f"Humedad: {humedad_val:.2f}\n"
-        f"Precipitación: {precip_actual:.1f} mm\n"
-        f"Área: {area_ha:.2f} ha\n"
-        f"Pronóstico semana: {pronostico_gfs['alerta_esta_semana']}\n"
-        f"Datos de Estación: {datos_estacion}\n"
-    )
+    resumen = f"RESUMEN — {cultivo} — {datetime.now().strftime('%Y-%m-%d')}\nNDVI: {ndvi_val:.2f}\nTemperatura: {temp_val:.1f}°C\nHumedad: {humedad_val:.2f}\nPrecipitación: {precip_actual:.1f} mm\nÁrea: {area_ha:.2f} ha\nPronóstico semana: {pronostico_gfs['alerta_esta_semana']}\nDatos de Estación: {st.session_state['datos_estacion']}\n"
     st.download_button("⬇️ Resumen TXT", data=resumen, file_name="resumen.txt")
-
     st.markdown("---")
     st.subheader("📦 Exportar para biomod2 (R)")
     if st.button("🔬 Generar archivo biomod2"):
@@ -1420,28 +1397,19 @@ with tab_export:
             st.error("No se generaron puntos internos. Reducí el paso (step).")
         else:
             df_points = pd.DataFrame(points, columns=['longitud', 'latitud'])
-            df_points['NDVI']              = ndvi_val
-            df_points['temperatura_C']     = temp_val
-            df_points['precipitacion_mm']  = precip_actual
-            df_points['humedad_suelo']     = humedad_val
-            df_points['rendimiento_t_ha']  = predecir_rendimiento(ndvi_val, precip_actual, temp_val)
+            df_points['NDVI'] = ndvi_val
+            df_points['temperatura_C'] = temp_val
+            df_points['precipitacion_mm'] = precip_actual
+            df_points['humedad_suelo'] = humedad_val
+            df_points['rendimiento_t_ha'] = predecir_rendimiento(ndvi_val, precip_actual, temp_val)
             umbral_ndvi = UMBRALES[cultivo]['NDVI_min']
             df_points['Presence'] = (df_points['NDVI'] >= umbral_ndvi).astype(int)
-            st.download_button(
-                "📥 Descargar CSV para biomod2",
-                data=df_points.to_csv(index=False),
-                file_name=f"biomod2_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-            )
+            st.download_button("📥 Descargar CSV para biomod2", data=df_points.to_csv(index=False), file_name=f"biomod2_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", mime="text/csv")
             st.success(f"✅ {len(df_points)} puntos generados dentro de la parcela.")
 
 # ============================================================
 # DEM (RELIEVE)
 # ============================================================
-# Aseguramos que la variable existe (por si acaso)
-if 'OPENTOPOGRAPHY_AVAILABLE' not in dir():
-    OPENTOPOGRAPHY_AVAILABLE = True
-
 with tab_dem:
     st.header("🗻 Análisis de Relieve — OpenTopography")
     if not OPENTOPOGRAPHY_AVAILABLE:
@@ -1450,19 +1418,13 @@ with tab_dem:
         _ot_key = OPENTOPOGRAPHY_API_KEY
         if not _ot_key:
             _ot_key = st.session_state.get("ot_api_key_manual", "")
-            _key_input = st.text_input(
-                "🔑 API Key de OpenTopography",
-                value=_ot_key,
-                type="password",
-                help="Conseguila gratis en https://opentopography.org/developers"
-            )
+            _key_input = st.text_input("🔑 API Key de OpenTopography", value=_ot_key, type="password", help="Conseguila gratis en https://opentopography.org/developers")
             if _key_input:
                 st.session_state["ot_api_key_manual"] = _key_input
                 _ot_key = _key_input
             if not _ot_key:
                 st.info("Ingresá tu API key de OpenTopography para descargar el DEM.")
                 st.stop()
-
         bounds_dem = gdf.total_bounds
         col_ds, col_btn = st.columns([3, 1])
         with col_ds:
@@ -1470,37 +1432,29 @@ with tab_dem:
         with col_btn:
             st.write("")
             cargar_dem = st.button("📥 Cargar DEM", type="primary")
-
         if cargar_dem:
             dataset_sel = _DATASETS_DEM[resolucion]
             with st.spinner(f"Descargando DEM {resolucion} desde OpenTopography..."):
                 dem = obtener_dem_opentopography(bounds_dem, _ot_key, dem_type=dataset_sel)
             if dem is not None:
-                st.session_state["dem_data"]     = dem
-                st.session_state["dem_dataset"]  = resolucion
+                st.session_state["dem_data"] = dem
+                st.session_state["dem_dataset"] = resolucion
                 elevation_mean = float(np.nanmean(dem.values))
                 st.success(f"✅ DEM cargado · Elevación media: **{elevation_mean:.0f} m**")
-
         if st.session_state.get("dem_data") is not None:
-            dem       = st.session_state["dem_data"]
-            ds_label  = st.session_state.get("dem_dataset", resolucion)
-            elev_min  = float(np.nanmin(dem.values))
-            elev_max  = float(np.nanmax(dem.values))
+            dem = st.session_state["dem_data"]
+            ds_label = st.session_state.get("dem_dataset", resolucion)
+            elev_min = float(np.nanmin(dem.values))
+            elev_max = float(np.nanmax(dem.values))
             elev_mean = float(np.nanmean(dem.values))
             elev_range = elev_max - elev_min
-
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("⬇️ Elevación mínima",  f"{elev_min:.0f} m")
-            c2.metric("⬆️ Elevación máxima",  f"{elev_max:.0f} m")
-            c3.metric("📏 Elevación media",   f"{elev_mean:.0f} m")
+            c1.metric("⬇️ Elevación mínima", f"{elev_min:.0f} m")
+            c2.metric("⬆️ Elevación máxima", f"{elev_max:.0f} m")
+            c3.metric("📏 Elevación media", f"{elev_mean:.0f} m")
             c4.metric("↕️ Rango altitudinal", f"{elev_range:.0f} m")
-
             st.markdown("---")
-            tipo_vis = st.radio(
-                "Visualización", ["🗺️ Mapa 2D interactivo", "📐 Modelo 3D interactivo"],
-                horizontal=True
-            )
-
+            tipo_vis = st.radio("Visualización", ["🗺️ Mapa 2D interactivo", "📐 Modelo 3D interactivo"], horizontal=True)
             if tipo_vis == "🗺️ Mapa 2D interactivo" and FOLIUM_OK:
                 with st.spinner("Generando mapa 2D con overlay DEM..."):
                     mapa_dem = generar_mapa_folium_dem(gdf, dem, ds_label)
@@ -1513,7 +1467,6 @@ with tab_dem:
                     fig_3d, _mn, _mx, _me = generar_grafico_3d_dem(dem)
                 if fig_3d is not None:
                     st.plotly_chart(fig_3d, use_container_width=True)
-
             with st.expander("📈 Ver perfil de elevación"):
                 if XARRAY_OK:
                     try:
@@ -1524,30 +1477,19 @@ with tab_dem:
                         ax_p.fill_between(x_lon, fila_central, alpha=0.4, color="saddlebrown")
                         ax_p.plot(x_lon, fila_central, color="saddlebrown", linewidth=1.5)
                         ax_p.axhline(elev_mean, color="blue", linestyle="--", linewidth=1)
-                        ax_p.set_xlabel("Longitud")
-                        ax_p.set_ylabel("Elevación (m)")
+                        ax_p.set_xlabel("Longitud"); ax_p.set_ylabel("Elevación (m)")
                         ax_p.set_title("Perfil de elevación")
-                        plt.tight_layout()
-                        st.pyplot(fig_p)
+                        plt.tight_layout(); st.pyplot(fig_p)
                     except Exception as e:
                         st.warning(f"No se pudo generar el perfil: {e}")
-
             with st.expander("💾 Exportar datos de elevación"):
                 try:
                     arr_flat = dem.values.squeeze().flatten()
                     lons_flat = np.tile(dem.x.values, len(dem.y.values))
                     lats_flat = np.repeat(dem.y.values, len(dem.x.values))
-                    df_dem = pd.DataFrame({
-                        "latitud":   lats_flat,
-                        "longitud":  lons_flat,
-                        "elevacion_m": arr_flat,
-                    }).dropna()
+                    df_dem = pd.DataFrame({"latitud": lats_flat, "longitud": lons_flat, "elevacion_m": arr_flat}).dropna()
                     st.dataframe(df_dem.head(200))
-                    st.download_button(
-                        "⬇️ Descargar DEM completo (CSV)",
-                        data=df_dem.to_csv(index=False),
-                        file_name=f"dem_{ds_label.replace(' ','_')}.csv",
-                    )
+                    st.download_button("⬇️ Descargar DEM completo (CSV)", data=df_dem.to_csv(index=False), file_name=f"dem_{ds_label.replace(' ','_')}.csv")
                 except Exception as e:
                     st.warning(f"Error exportando DEM: {e}")
 
@@ -1564,47 +1506,33 @@ with tab_npk:
             else:
                 ndvis = obtener_ndvi_por_bloque(gdf_bloques, fecha_fin)
                 gdf_bloques['ndvi'] = ndvis
-
                 areas_bloque = []
                 for _, row in gdf_bloques.iterrows():
-                    a = calcular_superficie(gpd.GeoDataFrame(
-                        {'geometry': [row.geometry]}, crs='EPSG:4326'
-                    ))
+                    a = calcular_superficie(gpd.GeoDataFrame({'geometry': [row.geometry]}, crs='EPSG:4326'))
                     areas_bloque.append(a)
                 gdf_bloques['area_ha'] = areas_bloque
-
-                recs = [calcular_recomendaciones_npk(v, cultivo)
-                        for v in gdf_bloques['ndvi']]
-                gdf_bloques['nivel']   = [r['nivel'] for r in recs]
-                gdf_bloques['N_kg_ha'] = [r['N']     for r in recs]
-                gdf_bloques['P_kg_ha'] = [r['P']     for r in recs]
-                gdf_bloques['K_kg_ha'] = [r['K']     for r in recs]
-
-                rends = [estimar_potencial_cosecha(v, cultivo, a)
-                         for v, a in zip(gdf_bloques['ndvi'], gdf_bloques['area_ha'])]
-                gdf_bloques['rend_t_ha']    = [r[0] for r in rends]
+                recs = [calcular_recomendaciones_npk(v, cultivo) for v in gdf_bloques['ndvi']]
+                gdf_bloques['nivel'] = [r['nivel'] for r in recs]
+                gdf_bloques['N_kg_ha'] = [r['N'] for r in recs]
+                gdf_bloques['P_kg_ha'] = [r['P'] for r in recs]
+                gdf_bloques['K_kg_ha'] = [r['K'] for r in recs]
+                rends = [estimar_potencial_cosecha(v, cultivo, a) for v, a in zip(gdf_bloques['ndvi'], gdf_bloques['area_ha'])]
+                gdf_bloques['rend_t_ha'] = [r[0] for r in rends]
                 gdf_bloques['prod_total_t'] = [r[1] for r in rends]
-
                 c1, c2, c3, c4 = st.columns(4)
                 ndvi_med = gdf_bloques['ndvi'].mean()
-                c1.metric("NDVI promedio",     f"{ndvi_med:.3f}")
-                c2.metric("Bloques críticos",  str((gdf_bloques['N_kg_ha'] > 40).sum()))
-                c3.metric("Rend. medio (t/ha)",f"{gdf_bloques['rend_t_ha'].mean():.1f}")
-                c4.metric("Producción total",  f"{gdf_bloques['prod_total_t'].sum():.1f} t")
-
+                c1.metric("NDVI promedio", f"{ndvi_med:.3f}")
+                c2.metric("Bloques críticos", str((gdf_bloques['N_kg_ha'] > 40).sum()))
+                c3.metric("Rend. medio (t/ha)", f"{gdf_bloques['rend_t_ha'].mean():.1f}")
+                c4.metric("Producción total", f"{gdf_bloques['prod_total_t'].sum():.1f} t")
                 st.subheader("📋 Detalle por bloque")
-                display_cols = ['id_bloque','area_ha','ndvi','nivel',
-                                'N_kg_ha','P_kg_ha','K_kg_ha',
-                                'rend_t_ha','prod_total_t']
+                display_cols = ['id_bloque','area_ha','ndvi','nivel','N_kg_ha','P_kg_ha','K_kg_ha','rend_t_ha','prod_total_t']
                 st.dataframe(gdf_bloques[display_cols].round(3), use_container_width=True)
-
                 if FOLIUM_OK:
                     st.subheader("🗺️ Mapa de calor NDVI por bloque")
                     bounds_b = gdf_bloques.total_bounds
                     c_lat, c_lon, z = obtener_zoom_con_margen(bounds_b)
-                    m_npk = folium.Map(location=[c_lat, c_lon], zoom_start=z,
-                                       tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',
-                                       attr='Google Hybrid')
+                    m_npk = folium.Map(location=[c_lat, c_lon], zoom_start=z, tiles='https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', attr='Google Hybrid')
                     vmin = gdf_bloques['ndvi'].min()
                     vmax = gdf_bloques['ndvi'].max()
                     cmap_fn = plt.cm.RdYlGn
@@ -1613,27 +1541,13 @@ with tab_npk:
                         norm_v = (ndvi_b - vmin) / max(vmax - vmin, 0.01)
                         r_, g_, b_, _ = cmap_fn(norm_v)
                         hex_color = '#{:02x}{:02x}{:02x}'.format(int(r_*255), int(g_*255), int(b_*255))
-                        popup_txt = (f"Bloque {int(row.id_bloque)}<br>"
-                                     f"NDVI: {ndvi_b:.3f}<br>"
-                                     f"N: {int(row.N_kg_ha)} kg/ha · "
-                                     f"P: {int(row.P_kg_ha)} · K: {int(row.K_kg_ha)}<br>"
-                                     f"Rend.: {row.rend_t_ha:.1f} t/ha")
-                        folium.GeoJson(
-                            gpd.GeoDataFrame({'geometry': [row.geometry]},
-                                             crs='EPSG:4326').__geo_interface__,
-                            style_function=lambda x, c=hex_color: {
-                                'fillColor': c, 'color': '#333', 'weight': 1, 'fillOpacity': 0.7},
-                            tooltip=f"Bloque {int(row.id_bloque)} · NDVI {ndvi_b:.3f}",
-                            popup=folium.Popup(popup_txt, max_width=200),
-                        ).add_to(m_npk)
+                        popup_txt = f"Bloque {int(row.id_bloque)}<br>NDVI: {ndvi_b:.3f}<br>N: {int(row.N_kg_ha)} kg/ha · P: {int(row.P_kg_ha)} · K: {int(row.K_kg_ha)}<br>Rend.: {row.rend_t_ha:.1f} t/ha"
+                        folium.GeoJson(gpd.GeoDataFrame({'geometry': [row.geometry]}, crs='EPSG:4326').__geo_interface__,
+                                       style_function=lambda x, c=hex_color: {'fillColor': c, 'color': '#333', 'weight': 1, 'fillOpacity': 0.7},
+                                       tooltip=f"Bloque {int(row.id_bloque)} · NDVI {ndvi_b:.3f}",
+                                       popup=folium.Popup(popup_txt, max_width=200)).add_to(m_npk)
                     components.html(m_npk.get_root().render(), height=500)
-
-                st.download_button(
-                    "⬇️ Descargar CSV fertilidad",
-                    data=gdf_bloques[display_cols].to_csv(index=False),
-                    file_name=f"fertilidad_npk_{cultivo}.csv",
-                    mime="text/csv",
-                )
+                st.download_button("⬇️ Descargar CSV fertilidad", data=gdf_bloques[display_cols].to_csv(index=False), file_name=f"fertilidad_npk_{cultivo}.csv", mime="text/csv")
 
 # ============================================================
 # AGROECOLOGÍA — 10 PRINCIPIOS
@@ -1644,37 +1558,18 @@ with tab_agro:
     with col_a:
         if st.button("🌿 Recomendación por principio", type="primary"):
             with st.spinner("Generando recomendaciones agroecológicas…"):
-                rec = generar_recomendaciones_agroecologicas(
-                    cultivo, fase_fenologica, ndvi_val, temp_val, humedad_val, precip_actual
-                )
+                rec = generar_recomendaciones_agroecologicas(cultivo, fase_fenologica, ndvi_val, temp_val, humedad_val, precip_actual)
             st.markdown("### 🌿 Recomendaciones por Principio Agroecológico")
             st.markdown(rec)
-            st.download_button(
-                "⬇️ Descargar recomendaciones",
-                data=rec,
-                file_name=f"agroecologia_principios_{cultivo}.txt",
-            )
+            st.download_button("⬇️ Descargar recomendaciones", data=rec, file_name=f"agroecologia_principios_{cultivo}.txt")
     with col_b:
         if st.button("📋 Plan agroecológico completo"):
             with st.spinner("Generando plan completo…"):
-                plan = generar_plan_agroecologico_completo(
-                    cultivo, fase_fenologica, ndvi_val, temp_val,
-                    humedad_val, precip_actual, area_ha
-                )
+                plan = generar_plan_agroecologico_completo(cultivo, fase_fenologica, ndvi_val, temp_val, humedad_val, precip_actual, area_ha)
             st.markdown("### 📋 Plan Agroecológico Integral")
             st.markdown(plan)
-            st.download_button(
-                "⬇️ Descargar plan",
-                data=plan,
-                file_name=f"plan_agroecologico_{cultivo}.txt",
-            )
-
-    st.caption(
-        f"📊 Contexto enviado a la IA — NDVI: {ndvi_val:.3f} · "
-        f"Temp: {temp_val:.1f}°C · Humedad: {humedad_val:.2f} · "
-        f"Precip: {precip_actual:.1f} mm · Fase: {fase_fenologica} · "
-        f"Cultivo: {cultivo}"
-    )
+            st.download_button("⬇️ Descargar plan", data=plan, file_name=f"plan_agroecologico_{cultivo}.txt")
+    st.caption(f"📊 Contexto enviado a la IA — NDVI: {ndvi_val:.3f} · Temp: {temp_val:.1f}°C · Humedad: {humedad_val:.2f} · Precip: {precip_actual:.1f} mm · Fase: {fase_fenologica} · Cultivo: {cultivo}")
 
 # ============================================================
 # CARBONO Y CRÉDITOS
@@ -1684,55 +1579,27 @@ with tab_carbono:
     calc_c = CalculadorCarbono()
     precip_anual = estimar_precipitacion_anual(df_precip)
     res_c = calc_c.calcular_carbono_hectarea(ndvi_val, precip_anual)
-
-    co2_total   = round(res_c['co2_equivalente_ton_ha'] * area_ha, 2)
-    creditos    = round(co2_total / 1000, 4)
-    precio_usd  = round(creditos * 15, 2)
-
+    co2_total = round(res_c['co2_equivalente_ton_ha'] * area_ha, 2)
+    creditos = round(co2_total / 1000, 4)
+    precio_usd = round(creditos * 15, 2)
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("🌿 C total (t C/ha)",  f"{res_c['carbono_total_ton_ha']}")
-    c2.metric("☁️ CO₂e (t/ha)",        f"{res_c['co2_equivalente_ton_ha']}")
-    c3.metric("📐 Área",               f"{area_ha:.2f} ha")
+    c1.metric("🌿 C total (t C/ha)", f"{res_c['carbono_total_ton_ha']}")
+    c2.metric("☁️ CO₂e (t/ha)", f"{res_c['co2_equivalente_ton_ha']}")
+    c3.metric("📐 Área", f"{area_ha:.2f} ha")
     c4.metric("🪙 Créditos (kt CO₂e)", f"{creditos:.4f}")
-    c5.metric("💵 Valor estimado USD",  f"${precio_usd:,.2f}")
-
+    c5.metric("💵 Valor estimado USD", f"${precio_usd:,.2f}")
     st.markdown("---")
     st.subheader("📊 Desglose por pool de carbono")
-    df_pools = pd.DataFrame(
-        list(res_c['desglose'].items()),
-        columns=['Pool de carbono', 't C/ha']
-    )
+    df_pools = pd.DataFrame(list(res_c['desglose'].items()), columns=['Pool de carbono', 't C/ha'])
     st.dataframe(df_pools, use_container_width=True)
-
     fig_c, ax_c = plt.subplots(figsize=(8, 3))
-    bars = ax_c.barh(df_pools['Pool de carbono'], df_pools['t C/ha'],
-                     color=['#2ecc71','#27ae60','#f39c12','#e67e22','#8e44ad'])
+    bars = ax_c.barh(df_pools['Pool de carbono'], df_pools['t C/ha'], color=['#2ecc71','#27ae60','#f39c12','#e67e22','#8e44ad'])
     ax_c.set_xlabel('t C/ha')
     ax_c.set_title(f'Distribución de carbono — {cultivo} · {area_ha:.2f} ha')
     for bar, val in zip(bars, df_pools['t C/ha']):
-        ax_c.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2,
-                  f'{val:.3f}', va='center', fontsize=9)
-    plt.tight_layout()
-    st.pyplot(fig_c)
+        ax_c.text(bar.get_width() + 0.01, bar.get_y() + bar.get_height()/2, f'{val:.3f}', va='center', fontsize=9)
+    plt.tight_layout(); st.pyplot(fig_c)
+    st.info(f"💡 Precipitación anual estimada: **{precip_anual:.0f} mm/año** · Precio de referencia: **15 USD/t CO₂e** (mercado voluntario).")
+    st.download_button("⬇️ Exportar reporte de carbono CSV", data=pd.DataFrame([{'cultivo': cultivo, 'area_ha': area_ha, 'ndvi': ndvi_val, 'precip_anual_mm': precip_anual, **res_c['desglose'], 'carbono_total_ton_ha': res_c['carbono_total_ton_ha'], 'co2e_ton_ha': res_c['co2_equivalente_ton_ha'], 'co2e_total_parcela': co2_total, 'creditos_kton': creditos, 'valor_usd': precio_usd}]).to_csv(index=False), file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv", mime="text/csv")
 
-    st.info(
-        f"💡 Precipitación anual estimada: **{precip_anual:.0f} mm/año** · "
-        f"Precio de referencia: **15 USD/t CO₂e** (mercado voluntario)."
-    )
-    st.download_button(
-        "⬇️ Exportar reporte de carbono CSV",
-        data=pd.DataFrame([{
-            'cultivo': cultivo, 'area_ha': area_ha,
-            'ndvi': ndvi_val, 'precip_anual_mm': precip_anual,
-            **res_c['desglose'],
-            'carbono_total_ton_ha': res_c['carbono_total_ton_ha'],
-            'co2e_ton_ha': res_c['co2_equivalente_ton_ha'],
-            'co2e_total_parcela': co2_total,
-            'creditos_kton': creditos,
-            'valor_usd': precio_usd,
-        }]).to_csv(index=False),
-        file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv",
-        mime="text/csv",
-    )
-
-st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos simulados de estación meteorológica · Sentinel-2 · ERA5 · CHIRPS · GFS")
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS")
