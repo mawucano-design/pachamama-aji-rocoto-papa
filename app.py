@@ -1,13 +1,6 @@
-# app.py — Plataforma de Gestión de Riesgos Climáticos para Ají y Rocoto
-# Fusión de app.py + app_mejorada.py con integración FEN completa (Niveles 1-6)
+# app.py — Plataforma de Monitoreo de Hortalizas bajo Invernadero
+# Cultivos: Morrón, Tomate, Lechuga
 # Ejecutar: streamlit run app.py
-#
-# DEPENDENCIAS:
-#   pip install streamlit geopandas pandas numpy matplotlib shapely
-#   pip install folium streamlit-folium
-#   pip install groq scikit-learn
-#   pip install beautifulsoup4 requests PyPDF2
-#   pip install earthengine-api  (opcional)
 
 # ============================================================
 # IMPORTS — ESTÁNDAR
@@ -21,6 +14,7 @@ import warnings
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from io import BytesIO
+import random
 
 # ============================================================
 # IMPORTS — TERCEROS PRINCIPALES
@@ -81,7 +75,7 @@ try:
     SKLEARN_OK = True
 except ImportError:
     SKLEARN_OK = False
-    LinearRegression = None  # type: ignore
+    LinearRegression = None
 
 try:
     import requests
@@ -98,9 +92,6 @@ except ImportError:
     xr = None
     XARRAY_OK = False
 
-# DEM vía API REST — no requiere bmi-topography
-OPENTOPOGRAPHY_AVAILABLE = True  # requests siempre disponible
-
 try:
     from PIL import Image as PilImage
     PILLOW_OK = True
@@ -116,9 +107,7 @@ except ImportError:
 # ============================================================
 # SECRETS / ENV
 # ============================================================
-# Leer secrets.toml directamente como fallback robusto
 def _leer_secrets_toml():
-    """Lee .streamlit/secrets.toml manualmente si st.secrets falla."""
     import pathlib
     candidates = [
         pathlib.Path(__file__).parent / ".streamlit" / "secrets.toml",
@@ -130,7 +119,6 @@ def _leer_secrets_toml():
                 raw = p.read_text(encoding="utf-8")
                 result = {}
                 current_section = result
-                current_key = None
                 for line in raw.splitlines():
                     line = line.strip()
                     if not line or line.startswith("#"):
@@ -173,88 +161,39 @@ GROQ_API_KEY = _get_secret("GROQ_API_KEY")
 if GROQ_API_KEY and GROQ_AVAILABLE:
     os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
-# Para usar tu clave de OpenTopography, agrégala en .streamlit/secrets.toml:
-#   OPENTOPOGRAPHY_API_KEY = "tu_clave_aqui"
-# O como variable de entorno antes de correr la app:
-#   set OPENTOPOGRAPHY_API_KEY=tu_clave_aqui  (Windows)
 OPENTOPOGRAPHY_API_KEY = _get_secret("OPENTOPOGRAPHY_API_KEY")
 
 # ============================================================
-# PARÁMETROS DE CULTIVOS — con NDVI_min_fen añadido
+# PARÁMETROS DE CULTIVOS (Invernadero)
 # ============================================================
-CULTIVOS = ["AJÍ", "ROCOTO", "PAPA ANDINA"]
-ICONOS   = {"AJÍ": "🌶️", "ROCOTO": "🥵", "PAPA ANDINA": "🥔"}
+CULTIVOS = ["MORRÓN", "TOMATE", "LECHUGA"]
+ICONOS   = {"MORRÓN": "🫑", "TOMATE": "🍅", "LECHUGA": "🥬"}
 
 UMBRALES = {
-    "AJÍ": {
-        "NDVI_min": 0.40, "NDVI_min_fen": 0.32,
-        "NDRE_min": 0.15,
-        "temp_min": 18, "temp_max": 30,
-        "humedad_min": 0.25, "humedad_max": 0.65,
+    "MORRÓN": {
+        "NDVI_min": 0.45, "NDRE_min": 0.18,
+        "temp_min": 18, "temp_max": 28,
+        "humedad_min": 0.55, "humedad_max": 0.85,
     },
-    "ROCOTO": {
-        "NDVI_min": 0.45, "NDVI_min_fen": 0.36,
-        "NDRE_min": 0.18,
-        "temp_min": 16, "temp_max": 28,
-        "humedad_min": 0.30, "humedad_max": 0.70,
+    "TOMATE": {
+        "NDVI_min": 0.50, "NDRE_min": 0.20,
+        "temp_min": 18, "temp_max": 26,
+        "humedad_min": 0.60, "humedad_max": 0.85,
     },
-    "PAPA ANDINA": {
-        "NDVI_min": 0.50, "NDVI_min_fen": 0.38,
-        "NDRE_min": 0.20,
-        "temp_min": 10, "temp_max": 22,
-        "humedad_min": 0.35, "humedad_max": 0.75,
+    "LECHUGA": {
+        "NDVI_min": 0.55, "NDRE_min": 0.22,
+        "temp_min": 12, "temp_max": 24,
+        "humedad_min": 0.65, "humedad_max": 0.90,
     },
 }
 
 # ============================================================
-# NIVEL 3 — MATRIZ DE RIESGO HISTÓRICO POR ZONA (FEN)
+# MODELO PREDICTIVO DE RENDIMIENTO
 # ============================================================
-RIESGO_HISTORICO_FEN = {
-    "Lima":        {"ndvi_promedio_fen": 0.35, "perdidas_pct": 35, "region": "Costa centro",  "lat_ref": -12.0, "lon_ref": -76.9},
-    "Ica":         {"ndvi_promedio_fen": 0.40, "perdidas_pct": 28, "region": "Costa sur",     "lat_ref": -14.0, "lon_ref": -75.7},
-    "Pasco":       {"ndvi_promedio_fen": 0.20, "perdidas_pct": 50, "region": "Sierra centro", "lat_ref": -10.7, "lon_ref": -76.2},
-    "La Libertad": {"ndvi_promedio_fen": 0.30, "perdidas_pct": 42, "region": "Costa norte",  "lat_ref":  -8.1, "lon_ref": -79.0},
-    "Piura":       {"ndvi_promedio_fen": 0.25, "perdidas_pct": 55, "region": "Costa norte",  "lat_ref":  -5.2, "lon_ref": -80.6},
-}
-
-def zona_mas_cercana(lat, lon):
-    """Retorna el nombre de la zona del diccionario RIESGO_HISTORICO_FEN más cercana a la parcela."""
-    mejor, dist_min = "Lima", float("inf")
-    for zona, d in RIESGO_HISTORICO_FEN.items():
-        dist = (lat - d["lat_ref"])**2 + (lon - d["lon_ref"])**2
-        if dist < dist_min:
-            dist_min = dist
-            mejor = zona
-    return mejor
-
-# ============================================================
-# MODELO PREDICTIVO DE RENDIMIENTO (sklearn)
-# ============================================================
-_datos_historicos = np.array([
-    [0.62, 45.0, 22.5, 0, 5.8],
-    [0.58, 120.0, 24.5, 2, 2.5],
-    [0.65, 30.0, 21.0, 0, 6.2],
-    [0.55, 95.0, 23.8, 1, 3.5],
-    [0.52, 110.0, 25.0, 2, 2.2],
-    [0.45, 140.0, 26.5, 3, 1.0],
-    [0.60, 70.0, 22.0, 0, 5.5],
-    [0.63, 55.0, 23.0, 1, 4.2],
-])
-_modelo_rendimiento = None
-if SKLEARN_OK:
-    _modelo_rendimiento = LinearRegression()
-    _modelo_rendimiento.fit(_datos_historicos[:, :4], _datos_historicos[:, 4])
-
-def predecir_rendimiento(ndvi, precip, temp, codigo_enfen):
-    if _modelo_rendimiento is not None:
-        try:
-            pred = _modelo_rendimiento.predict([[ndvi, precip, temp, codigo_enfen]])[0]
-            return float(np.clip(pred, 0.0, 8.0))
-        except Exception:
-            pass
-    if ndvi > 0.6 and precip < 80 and 20 <= temp <= 24 and codigo_enfen <= 1:
+def predecir_rendimiento(ndvi, precip, temp):
+    if ndvi > 0.6 and 20 <= temp <= 24:
         return 5.5
-    elif ndvi > 0.45 and precip < 120 and codigo_enfen <= 2:
+    elif ndvi > 0.45:
         return 3.5
     return 2.0
 
@@ -270,7 +209,6 @@ def inicializar_gee():
     if _gee_creds:
         try:
             creds = _gee_creds
-            # ServiceAccountCredentials necesita el JSON completo, no solo private_key
             key_dict = {
                 "type": "service_account",
                 "project_id": creds.get("project_id", "democultivos"),
@@ -294,7 +232,6 @@ def inicializar_gee():
             st.session_state['gee_error'] = f"Service account: {e}"
             st.session_state.gee_authenticated = False
             return False
-    # Sin service account en secrets — no intentar auth interactiva en cloud
     st.session_state['gee_error'] = "No se encontró [gee_service_account] en secrets.toml"
     st.session_state.gee_authenticated = False
     return False
@@ -541,72 +478,24 @@ def determinar_riesgo(indice, valor, cultivo, umbrales):
     else:                    return "CRÍTICO",  "🔴"
 
 # ============================================================
-# NIVEL 1 — CONTEXTO ENFEN
-# ============================================================
-def obtener_contexto_enfen():
-    """Retorna el contexto oficial más reciente de ENFEN para el Perú.
-    Prioriza scraping; usa datos de respaldo si falla."""
-    base = {
-        "estado":               "Alerta de El Niño Costero",
-        "anomalia_tsm":         1.5,          # °C en región Niño 1+2
-        "temp_max_anomalia_lima": 3.2,        # °C sobre promedio Lima
-        "temp_min_anomalia_ica":  2.2,        # °C sobre promedio Ica
-        "lluvias_pasco":        "normal a superior",
-        "lag_meses":            3,
-        "mes_critico":          "junio-julio",
-        "riesgo_agricola":      "ALTO",
-        "fuente":               "ENFEN Comunicado N°07-2026 (respaldo)",
-    }
-    if not SCRAPING_OK:
-        return base
-    try:
-        r = requests.get("https://enfen.imarpe.gob.pe/", timeout=10)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        for a in soup.find_all('a', href=True):
-            texto = a.get_text(strip=True)
-            if "Comunicado Oficial ENFEN" in texto:
-                href = a['href']
-                if not href.startswith('http'):
-                    href = requests.compat.urljoin("https://enfen.imarpe.gob.pe/", href)
-                base["fuente"] = f"ENFEN (scraping: {texto[:60]})"
-                break
-    except Exception:
-        pass
-    return base
-
-# ============================================================
-# NIVEL 2 — PRONÓSTICO GFS SIMPLE (PRÓXIMOS 7 DÍAS)
+# PRONÓSTICO GFS SIMPLE (PRÓXIMOS 7 DÍAS)
 # ============================================================
 def obtener_pronostico_gfs_simple(lat, lon, dias=7):
-    """Genera pronóstico meteorológico realista para 7 días.
-    Basado en condiciones actuales + anomalía ENFEN. Sin dependencia de API externa."""
     np.random.seed(int(abs(lat * 100 + lon * 10)) % 9999)
-    ctx = obtener_contexto_enfen()
-    anomalia = ctx["anomalia_tsm"] * 0.6          # transferencia océano→tierra
     es_costa = lon > -77.5
-
-    # Temperatura base según latitud peruana
-    temp_base = 22 + anomalia + (abs(lat) - 10) * (-0.3 if es_costa else -0.5)
+    temp_base = 22 + (abs(lat) - 10) * (-0.3 if es_costa else -0.5)
     precip_base = 3.0 if es_costa else 8.0
 
-    if ctx["riesgo_agricola"] == "ALTO":
-        precip_escala = 1.6
-        temp_extra    = 1.2
-    else:
-        precip_escala = 1.0
-        temp_extra    = 0.0
-
     fechas       = [(datetime.now() + timedelta(days=i)).strftime('%d/%m') for i in range(1, dias+1)]
-    temp_max     = [round(temp_base + temp_extra + np.random.uniform(-1.5, 2.5), 1) for _ in range(dias)]
-    precip_diaria = [round(max(0, np.random.exponential(precip_base * precip_escala)), 1) for _ in range(dias)]
+    temp_max     = [round(temp_base + np.random.uniform(-1.5, 2.5), 1) for _ in range(dias)]
+    precip_diaria = [round(max(0, np.random.exponential(precip_base)), 1) for _ in range(dias)]
 
-    # Alerta de semana
     if max(temp_max) > 32:
         alerta = f"⚠️ Golpe de calor probable (máx {max(temp_max):.1f}°C)"
     elif sum(precip_diaria) > 50:
         alerta = f"🌧️ Semana muy lluviosa ({sum(precip_diaria):.0f} mm acum.)"
     elif max(temp_max) > 29:
-        alerta = f"🌡️ Temperaturas elevadas por FEN (máx {max(temp_max):.1f}°C)"
+        alerta = f"🌡️ Temperaturas elevadas (máx {max(temp_max):.1f}°C)"
     else:
         alerta = f"🟢 Condiciones moderadas esta semana ({sum(precip_diaria):.0f} mm acum.)"
 
@@ -619,60 +508,6 @@ def obtener_pronostico_gfs_simple(lat, lon, dias=7):
         "temp_acum":  sum(temp_max) / dias,
         "precip_acum": sum(precip_diaria),
     }
-
-# ============================================================
-# NIVEL 4 — SCORE DE VULNERABILIDAD A FEN POR PARCELA
-# ============================================================
-def estimar_elevacion(lat, lon):
-    """Heurística de elevación para el Perú (sin DEM real)."""
-    if lon > -77.5:
-        return 150    # Costa
-    elif lon > -75.5:
-        return 1200   # Transición / Selva alta
-    else:
-        return 3200   # Sierra
-
-def calcular_vulnerabilidad_fen(gdf, cultivo, ndvi_actual, temp_actual, precip_actual, elevation=None):
-    """Calcula un score de vulnerabilidad a FEN (0–10) basado en múltiples factores."""
-    centroid = gdf.geometry.centroid.iloc[0]
-    if elevation is None:
-        elevation = estimar_elevacion(centroid.y, centroid.x)
-
-    score = 0.0
-
-    # Factor zona (elevación → región)
-    if elevation < 500:                                   # Costa
-        if centroid.y > -10:                              # Costa norte → mayor riesgo FEN
-            score += 3.0
-        else:
-            score += 2.0
-    elif elevation < 2000:                                # Transición
-        score += 1.5
-    else:                                                 # Sierra
-        score += 2.0
-
-    # Factor NDVI
-    umbral_fen = UMBRALES[cultivo]["NDVI_min_fen"]
-    if ndvi_actual < umbral_fen * 0.8:
-        score += 3.0
-    elif ndvi_actual < umbral_fen:
-        score += 1.5
-
-    # Factor temperatura
-    if temp_actual > 28 and cultivo == "AJÍ":
-        score += 2.0
-    elif temp_actual > UMBRALES[cultivo]["temp_max"]:
-        score += 1.0
-
-    # Factor elevación + cultivo + lluvias
-    if elevation > 1500 and cultivo == "ROCOTO" and precip_actual > 15:
-        score += 2.0
-
-    # Factor precipitación extrema
-    if precip_actual > 20:
-        score += 1.0
-
-    return min(10.0, round(score, 1))
 
 # ============================================================
 # FUNCIONES IA (GROQ)
@@ -693,23 +528,22 @@ def consultar_groq(prompt, max_tokens=700, model="llama-3.3-70b-versatile"):
         return f"❌ Error Groq: {str(e)}"
 
 def generar_alerta_detallada(fase, ndvi, temp, precip_actual, humedad,
-                              cultivo, umbrales, contexto_fen=None,
-                              vuln_score=None, pronostico_gfs=None):
-    """NIVEL 1+5: prompt enriquecido con contexto ENFEN, score FEN y pronóstico GFS."""
-    fen_bloque = ""
-    if contexto_fen:
-        fen_bloque = f"""
-CONTEXTO ENFEN (oficial):
-- Estado: {contexto_fen.get('estado', 'N/D')}
-- Anomalía TSM (Niño 1+2): +{contexto_fen.get('anomalia_tsm', 0):.1f}°C
-- Anomalía T° máx Lima: +{contexto_fen.get('temp_max_anomalia_lima', 0):.1f}°C
-- Anomalía T° mín Ica: +{contexto_fen.get('temp_min_anomalia_ica', 0):.1f}°C
-- Lluvias Pasco: {contexto_fen.get('lluvias_pasco', 'N/D')}
-- Mes crítico: {contexto_fen.get('mes_critico', 'N/D')}
-- Riesgo agrícola ENFEN: {contexto_fen.get('riesgo_agricola', 'N/D')}
-- Lag océano→cultivo: {contexto_fen.get('lag_meses', 3)} meses
+                              cultivo, umbrales, pronostico_gfs=None,
+                              datos_estacion=None):
+    """Genera alerta detallada usando contexto de invernadero y datos de estación."""
+    estacion_bloque = ""
+    if datos_estacion:
+        estacion_bloque = f"""
+DATOS DE ESTACIÓN METEOROLÓGICA (Simulada):
+- Temperatura exterior: {datos_estacion.get('temp_exterior', 0):.1f}°C
+- Humedad exterior: {datos_estacion.get('humedad_exterior', 0):.1f}%
+- Radiación solar: {datos_estacion.get('radiacion_solar', 0):.0f} W/m²
+- Velocidad del viento: {datos_estacion.get('viento', 0):.1f} km/h
+- pH del suelo: {datos_estacion.get('ph_suelo', 0):.1f}
+- Materia orgánica del suelo: {datos_estacion.get('materia_organica', 0):.1f}%
+- Fertilidad del suelo (N-P-K): N={datos_estacion.get('nitrogeno', 0)} mg/kg, P={datos_estacion.get('fosforo', 0)} mg/kg, K={datos_estacion.get('potasio', 0)} mg/kg
 """
-    vuln_bloque = f"\nVulnerabilidad FEN calculada (score): {vuln_score:.1f}/10\n" if vuln_score is not None else ""
+
     gfs_bloque = ""
     if pronostico_gfs:
         gfs_bloque = f"""
@@ -718,113 +552,56 @@ Pronóstico GFS próxima semana:
 - Precipitación acumulada: {pronostico_gfs['precip_acum']:.0f} mm
 - Alerta principal: {pronostico_gfs['alerta_esta_semana']}
 """
-    # Determinar nivel y acciones requeridas según el score
-    if vuln_score is not None:
-        if vuln_score <= 3:
-            nivel_score = "BAJO (0-3)"
-            accion_score = "Tomar medidas preventivas estándar."
-            n_acciones = 0   # no se piden acciones adicionales
-        elif vuln_score <= 7:
-            nivel_score = "MEDIO (4-7)"
-            accion_score = "Monitoreo intensivo requerido."
-            n_acciones = 3
-        else:
-            nivel_score = "CRÍTICO (8-10)"
-            accion_score = "Emergencia — intervenir YA."
-            n_acciones = 5
-    else:
-        nivel_score = "no disponible"
-        accion_score = ""
-        n_acciones = 3
-
-    acciones_instruccion = (
-        f"Da exactamente {n_acciones} acciones específicas e inmediatas para este nivel."
-        if n_acciones > 0
-        else "Confirma las medidas preventivas estándar ya en curso."
-    )
 
     prompt = f"""
-Eres un agrónomo experto en {cultivo} en la costa y sierra peruana.
+Eres un agrónomo experto en cultivo de {cultivo} bajo invernadero.
 
-SCORE DE VULNERABILIDAD FEN: {vuln_score:.1f}/10 → Nivel {nivel_score}
-DECISIÓN DE RIESGO (usar SOLO este score, no hacer evaluaciones independientes):
-- 0-3 BAJO  → {accion_score if nivel_score.startswith('BAJO') else 'Tomar medidas preventivas estándar.'}
-- 4-7 MEDIO → {accion_score if nivel_score.startswith('MEDIO') else 'Monitoreo intensivo + 3 acciones específicas.'}
-- 8-10 CRÍTICO → {accion_score if nivel_score.startswith('CRÍTICO') else 'Emergencia, intervenir YA + 5 acciones.'}
-
-El score ES la evaluación de riesgo. NO emitas juicios cualitativos separados
-(ALTO/MEDIO/BAJO) que contradigan o dupliquen el score. Úsalo como punto de partida
-único y construye la respuesta desde ahí.
-
-DATOS DE CONTEXTO (para fundamentar las acciones):
+DATOS DE CONTEXTO:
 - Cultivo: {cultivo} · Fase: {fase}
-- NDVI: {ndvi:.2f} (umbral normal {umbrales['NDVI_min']:.2f} / umbral FEN {umbrales.get('NDVI_min_fen', 0.32):.2f})
+- NDVI: {ndvi:.2f} (umbral normal {umbrales['NDVI_min']:.2f})
 - Temperatura: {temp:.1f}°C (óptimo {umbrales['temp_min']:.0f}-{umbrales['temp_max']:.0f}°C)
 - Precipitación reciente: {precip_actual:.1f} mm
 - Humedad suelo (SAR): {humedad:.2f} (óptimo {umbrales['humedad_min']:.2f}-{umbrales['humedad_max']:.2f})
-{fen_bloque}{gfs_bloque}
-INSTRUCCIONES DE FORMATO:
-1. Encabezado: reproduce el nivel y score ("Score FEN {vuln_score:.1f}/10 → {nivel_score}").
-2. Una sola oración explicando POR QUÉ el score llegó a ese nivel (factores dominantes).
-3. {acciones_instruccion} Cada acción: verbo imperativo + objeto + plazo (ej. "Instalar drenajes perimetrales antes del {contexto_fen.get('mes_critico', 'mes crítico') if contexto_fen else 'mes crítico'}").
-4. Cierre de 1 oración mencionando el lag océano→cultivo ({contexto_fen.get('lag_meses', 3) if contexto_fen else 3} meses) y el mes crítico.
-5. Máximo 300 palabras. Sin secciones adicionales ni evaluaciones de riesgo duplicadas.
+{estacion_bloque}{gfs_bloque}
+INSTRUCCIONES:
+1. Da exactamente 5 acciones específicas y prácticas para manejar el cultivo bajo invernadero.
+2. Incluye recomendaciones sobre control de clima (ventilación, calefacción, sombreado), manejo de riego y fertilización según datos de suelo.
+3. Usa los datos de la estación meteorológica para ajustar las recomendaciones.
+4. Formato claro y conciso, máximo 300 palabras.
 """
     return consultar_groq(prompt, max_tokens=800)
 
 # ============================================================
-# FUNCIONES ENFEN (SCRAPING — para tab ENFEN)
+# DATOS DE ESTACIÓN METEOROLÓGICA (SIMULADA)
 # ============================================================
-def _fallback_enfen_data():
+def obtener_datos_estacion_simulada():
+    """Genera datos simulados de una estación meteorológica."""
+    np.random.seed(int(datetime.now().timestamp()) % 10000)
+    
+    # Datos climáticos simulados
+    temp_exterior = round(np.random.uniform(15, 30), 1)
+    humedad_exterior = round(np.random.uniform(40, 90), 1)
+    radiacion_solar = round(np.random.uniform(200, 1000), 0)
+    viento = round(np.random.uniform(0, 20), 1)
+    
+    # Datos de suelo simulados
+    ph_suelo = round(np.random.uniform(5.5, 7.5), 1)
+    materia_organica = round(np.random.uniform(1.5, 4.0), 1)
+    nitrogeno = round(np.random.uniform(20, 100), 0)
+    fosforo = round(np.random.uniform(10, 60), 0)
+    potasio = round(np.random.uniform(50, 200), 0)
+    
     return {
-        "estado_alerta":       "Alerta de El Niño Costero",
-        "magnitud":            "Moderada (mayo-julio 2026)",
-        "region_afectada":     "Costa norte y centro",
-        "probabilidad_lluvias":"Normal a superior en costa norte",
-        "temperatura_anomalia":"Cálida débil a moderada (+1 a +2°C)",
-        "fecha_comunicado":    "Abril 2026",
-        "nivel_riesgo_agricola":"Alto",
+        'temp_exterior': temp_exterior,
+        'humedad_exterior': humedad_exterior,
+        'radiacion_solar': radiacion_solar,
+        'viento': viento,
+        'ph_suelo': ph_suelo,
+        'materia_organica': materia_organica,
+        'nitrogeno': nitrogeno,
+        'fosforo': fosforo,
+        'potasio': potasio,
     }
-
-def obtener_datos_enfen_actuales():
-    if not SCRAPING_OK:
-        return _fallback_enfen_data()
-    try:
-        r = requests.get("https://enfen.imarpe.gob.pe/", timeout=12)
-        soup = BeautifulSoup(r.text, 'html.parser')
-        comunicado = None
-        for a in soup.find_all('a', href=True):
-            if "Comunicado Oficial ENFEN" in a.get_text(strip=True):
-                href = a['href']
-                if not href.startswith('http'):
-                    href = requests.compat.urljoin("https://enfen.imarpe.gob.pe/", href)
-                comunicado = {"titulo": a.get_text(strip=True), "url": href}
-                break
-        texto_pdf = ""
-        if comunicado and "pdf" in comunicado['url'].lower():
-            try:
-                rp = requests.get(comunicado['url'], timeout=20)
-                if rp.status_code == 200:
-                    reader = PyPDF2.PdfReader(io.BytesIO(rp.content))
-                    texto_pdf = "".join(p.extract_text() for p in reader.pages)
-            except Exception:
-                pass
-        m = re.search(r"Estado del sistema de alerta:\s*([\w\s]+)", texto_pdf, re.IGNORECASE)
-        estado = m.group(1).strip() if m else "Alerta de El Niño Costero"
-        m2 = re.search(r"probabilidad de precipitaciones.*?(\d{1,3}%)", texto_pdf, re.IGNORECASE)
-        prob = m2.group(1) if m2 else "Normal a superior en costa norte"
-        riesgo = "Alto" if "alerta" in estado.lower() else ("Medio" if "vigilancia" in estado.lower() else "Bajo")
-        return {
-            "estado_alerta":       estado,
-            "magnitud":            "Moderada (probable hasta julio 2026)" if riesgo == "Alto" else "Débil",
-            "region_afectada":     "Costa norte y centro",
-            "probabilidad_lluvias": prob,
-            "temperatura_anomalia": "+1°C a +2°C (región Niño 1+2)",
-            "fecha_comunicado":    datetime.now().strftime("%B %Y"),
-            "nivel_riesgo_agricola": riesgo,
-        }
-    except Exception:
-        return _fallback_enfen_data()
 
 # ============================================================
 # FUNCIONES DEM (OPENTOPOGRAPHY)
@@ -839,10 +616,8 @@ _DATASETS_DEM = {
 }
 
 def obtener_dem_opentopography(bounds, api_key, dem_type="COP30"):
-    """Descarga DEM vía API REST de OpenTopography (sin bmi-topography)."""
-    import requests as _req, tempfile, struct, io
+    import requests as _req
     minx, miny, maxx, maxy = bounds
-    # Agrandar bbox un poco para asegurar cobertura
     pad = 0.005
     params = {
         "demtype": dem_type,
@@ -855,7 +630,6 @@ def obtener_dem_opentopography(bounds, api_key, dem_type="COP30"):
     try:
         resp = _req.get(url, params=params, timeout=60)
         resp.raise_for_status()
-        # Parsear formato AAIGrid (ASCII raster)
         lines = resp.text.strip().splitlines()
         header = {}
         data_start = 0
@@ -882,7 +656,6 @@ def obtener_dem_opentopography(bounds, api_key, dem_type="COP30"):
             return None
         arr = np.array(rows, dtype=np.float32)
         arr[arr == nodata] = np.nan
-        # Construir objeto simple con atributos compatibles
         lons = xll + np.arange(ncols) * cell if XARRAY_OK else None
         lats = yll + np.arange(nrows)[::-1] * cell if XARRAY_OK else None
         if XARRAY_OK and xr is not None:
@@ -890,7 +663,6 @@ def obtener_dem_opentopography(bounds, api_key, dem_type="COP30"):
                                coords={"y": lats, "x": lons},
                                attrs={"dem_type": dem_type})
         else:
-            # Fallback: objeto simple
             class _DEM:
                 def __init__(self, a, lx, ly):
                     self.values = a
@@ -905,7 +677,6 @@ def obtener_dem_opentopography(bounds, api_key, dem_type="COP30"):
         return None
 
 def generar_mapa_folium_dem(gdf, dem, dataset_label):
-    """Genera mapa Folium 2D con el DEM como ImageOverlay coloreado."""
     bounds = gdf.total_bounds
     centro_lat, centro_lon, zoom = obtener_zoom_con_margen(bounds)
     mapa = folium.Map(location=[centro_lat, centro_lon], zoom_start=zoom, control_scale=True)
@@ -940,14 +711,12 @@ def generar_mapa_folium_dem(gdf, dem, dataset_label):
     return mapa
 
 def generar_grafico_3d_dem(dem):
-    """Superficie 3D interactiva con Plotly."""
     if not PLOTLY_OK:
         st.error("Instala plotly: pip install plotly")
         return None, None, None, None
     try:
         arr = dem.values.squeeze() if dem.values.ndim > 2 else dem.values
         X, Y = np.meshgrid(dem.x.values, dem.y.values)
-        # Submuestreo si es muy grande
         if X.size > 50_000:
             step = int(np.sqrt(X.size / 50_000))
             X, Y, arr = X[::step, ::step], Y[::step, ::step], arr[::step, ::step]
@@ -963,12 +732,10 @@ def generar_grafico_3d_dem(dem):
         st.error(f"Error generando gráfico 3D: {e}")
         return None, None, None, None
 
-
 # ============================================================
 # MÓDULO NPK — División en bloques y fertilidad por zona
 # ============================================================
 def dividir_parcela_en_bloques(gdf, n_bloques):
-    """Divide la parcela en n_bloques celdas y retorna GeoDataFrame con intersecciones."""
     if gdf is None or len(gdf) == 0:
         return gdf
     gdf = validar_crs(gdf)
@@ -1000,7 +767,6 @@ def dividir_parcela_en_bloques(gdf, n_bloques):
     return gdf
 
 def obtener_ndvi_por_bloque(gdf_bloques, fecha):
-    """Obtiene el NDVI medio de GEE para cada bloque. Fallback a simulación."""
     if not GEE_AVAILABLE or not st.session_state.get('gee_authenticated', False):
         return [round(0.5 + np.random.randn()*0.08, 3) for _ in range(len(gdf_bloques))]
     region = ee.Geometry.Rectangle(gdf_bloques.total_bounds.tolist())
@@ -1019,29 +785,27 @@ def obtener_ndvi_por_bloque(gdf_bloques, fecha):
     return valores
 
 def calcular_recomendaciones_npk(ndvi, cultivo):
-    """Retorna dosis de N/P/K (kg/ha) según nivel de NDVI relativo al umbral del cultivo."""
     u = UMBRALES[cultivo]['NDVI_min']
     if ndvi >= u:
         return {'nivel': 'Óptimo 🟢', 'N': 0,  'P': 0,  'K': 0}
     elif ndvi >= u * 0.75:
         base = {'N': 40, 'P': 20, 'K': 30}
-        if cultivo == "ROCOTO":
+        if cultivo == "TOMATE":
             base['N'] = int(base['N']*1.2); base['K'] = int(base['K']*1.3)
         return {'nivel': 'Medio 🟡', **base}
     else:
         base = {'N': 80, 'P': 40, 'K': 60}
-        if cultivo == "ROCOTO":
+        if cultivo == "TOMATE":
             base['N'] = int(base['N']*1.2); base['K'] = int(base['K']*1.3)
         return {'nivel': 'Crítico 🔴', **base}
 
 def estimar_potencial_cosecha(ndvi, cultivo, area_ha):
-    """Estima rendimiento (t/ha) y producción total (t) basados en NDVI."""
-    if cultivo == "AJÍ":
-        base_t_ha, ndvi_opt = 18.0, 0.60
-    elif cultivo == "ROCOTO":
-        base_t_ha, ndvi_opt = 22.0, 0.65
-    else:  # PAPA ANDINA
-        base_t_ha, ndvi_opt = 14.0, 0.55
+    if cultivo == "MORRÓN":
+        base_t_ha, ndvi_opt = 25.0, 0.60
+    elif cultivo == "TOMATE":
+        base_t_ha, ndvi_opt = 35.0, 0.65
+    else:
+        base_t_ha, ndvi_opt = 20.0, 0.55
     factor = max(0.3, min(1.2, ndvi / ndvi_opt))
     rend   = round(base_t_ha * factor, 1)
     total  = round(rend * area_ha, 1)
@@ -1064,9 +828,8 @@ _PRINCIPIOS_AGROECOLOGICOS = (
 )
 
 def generar_recomendaciones_agroecologicas(cultivo, fase, ndvi, temp, humedad, precip):
-    """Una recomendación concreta por principio agroecológico (Groq)."""
     prompt = (
-        f"Eres agroecólogo experto en sistemas campesinos andinos y costeños del Perú. "
+        f"Eres agroecólogo experto en horticultura bajo invernadero. "
         f"Para el cultivo de {cultivo} en fase {fase}, con estos indicadores: "
         f"NDVI={ndvi:.2f}, temperatura={temp:.1f}°C, humedad suelo={humedad:.2f}, "
         f"precipitación={precip:.1f} mm, genera UNA recomendación práctica y concreta "
@@ -1076,9 +839,8 @@ def generar_recomendaciones_agroecologicas(cultivo, fase, ndvi, temp, humedad, p
     return consultar_groq(prompt, max_tokens=900)
 
 def generar_plan_agroecologico_completo(cultivo, fase, ndvi, temp, humedad, precip, area_ha):
-    """Plan agroecológico integral para la parcela (Groq)."""
     prompt = (
-        f"Diseña un plan agroecológico integral para una parcela de {area_ha:.1f} ha de {cultivo} "
+        f"Diseña un plan agroecológico integral para un invernadero de {area_ha:.1f} ha de {cultivo} "
         f"en fase {fase}. Datos actuales: NDVI={ndvi:.2f}, temperatura={temp:.1f}°C, "
         f"humedad suelo={humedad:.2f}, precipitación={precip:.1f} mm. "
         f"Incluye: manejo de suelo y compostaje, control biológico de plagas, "
@@ -1091,22 +853,17 @@ def generar_plan_agroecologico_completo(cultivo, fase, ndvi, temp, humedad, prec
 # MÓDULO CARBONO — Estimación y créditos
 # ============================================================
 class CalculadorCarbono:
-    """Estima carbono por pools (biomasa aérea, raíces, madera muerta, hojarasca, suelo)."""
     FACTORES = {
-        'fc_carbono':     0.47,   # fracción de carbono en biomasa seca (IPCC)
-        'ratio_co2':      3.67,   # factor C → CO₂e
-        'ratio_bgb':      0.24,   # raíces / biomasa aérea (IPCC tier 1, cultivos)
-        'prop_dw':        0.05,   # madera muerta / carbono AGB
-        'acum_hojarasca': 2.0,    # t MS/ha/año de hojarasca
-        'tasa_soc':       1.5,    # t C/ha/año acumulación SOC media
+        'fc_carbono':     0.47,
+        'ratio_co2':      3.67,
+        'ratio_bgb':      0.24,
+        'prop_dw':        0.05,
+        'acum_hojarasca': 2.0,
+        'tasa_soc':       1.5,
     }
 
     def calcular_carbono_hectarea(self, ndvi: float, precip_anual: float) -> dict:
-        """Retorna diccionario con carbono total (t C/ha), CO₂e y desglose por pool."""
-        # Factor climático (precipitación normalizada a 1200 mm/año)
         factor_clim = min(1.6, max(0.7, precip_anual / 1200))
-
-        # Biomasa aérea bruta (t MS/ha) según NDVI — curva empírica para hortícolas andinos
         if   ndvi > 0.70: agb = (15 + (ndvi - 0.70) * 80) * factor_clim
         elif ndvi > 0.50: agb = ( 8 + (ndvi - 0.50) * 60) * factor_clim
         elif ndvi > 0.30: agb = ( 4 + (ndvi - 0.30) * 40) * factor_clim
@@ -1135,7 +892,6 @@ class CalculadorCarbono:
         }
 
 def estimar_precipitacion_anual(df_precip: pd.DataFrame) -> float:
-    """Extrapola precipitación anual desde el DataFrame de series disponibles."""
     if df_precip is None or df_precip.empty or 'precip' not in df_precip.columns:
         return 1200.0
     media_diaria = df_precip['precip'].mean()
@@ -1145,11 +901,11 @@ def estimar_precipitacion_anual(df_precip: pd.DataFrame) -> float:
 # INTERFAZ PRINCIPAL
 # ============================================================
 st.set_page_config(
-    page_title="Gestión de Riesgos Climáticos — Ají y Rocoto",
+    page_title="Plataforma de Monitoreo de Hortalizas bajo Invernadero",
     layout="wide",
-    page_icon="🌶️",
+    page_icon="🌱",
 )
-st.title("🌶️ Plataforma de Gestión de Riesgos Climáticos para Ají y Rocoto")
+st.title("🌱 Plataforma de Monitoreo de Hortalizas bajo Invernadero")
 st.markdown("---")
 
 # ── Sidebar ──────────────────────────────────────────────────
@@ -1228,42 +984,25 @@ if st.session_state.get("gee_authenticated", False) and GEE_OK:
         except Exception as _e:
             st.sidebar.warning(f"⚠️ Error series GEE: {_e}")
 
-# ── Cálculos FEN globales (usados en múltiples pestañas) ─────
+# ── Cálculos globales ────────────────────────────────────────
 centroid_geom = gdf.geometry.centroid.iloc[0]
 _lat = centroid_geom.y
 _lon = centroid_geom.x
-elevation_est  = estimar_elevacion(_lat, _lon)
-zona_ref       = zona_mas_cercana(_lat, _lon)
-contexto_fen   = obtener_contexto_enfen()
 pronostico_gfs = obtener_pronostico_gfs_simple(_lat, _lon, dias=7)
-
-# Si hay un DEM cargado en session_state, usar su elevación media (más precisa)
-if st.session_state.get("dem_data") is not None:
-    try:
-        elevation_est = float(np.nanmean(st.session_state["dem_data"].values))
-    except Exception:
-        pass  # mantiene la heurística
-
-vuln_score = calcular_vulnerabilidad_fen(
-    gdf, cultivo, ndvi_val, temp_val, precip_actual, elevation_est
-)
-codigo_enfen = (2 if "alerta" in contexto_fen["estado"].lower()
-                else 1 if "vigilancia" in contexto_fen["estado"].lower()
-                else 0)
+datos_estacion = obtener_datos_estacion_simulada()
 
 # ============================================================
-# PESTAÑAS — 8 en total
+# PESTAÑAS — 9 en total (Agregamos Estación Meteorológica)
 # ============================================================
 (tab_dashboard, tab_mapas, tab_monitoreo,
- tab_alerta, tab_gobernanza, tab_export, tab_fen, tab_dem,
+ tab_alerta, tab_estacion, tab_export, tab_dem,
  tab_npk, tab_agro, tab_carbono) = st.tabs([
     "📊 Dashboard General",
     "🗺️ Mapa de Riesgo",
     "📈 Monitoreo Fenológico",
     "⚠️ Alertas IA",
-    "📄 Gobernanza",
+    "🌦️ Estación Meteorológica",
     "💾 Exportar",
-    "📊 Análisis FEN",
     "🗻 DEM (Relieve)",
     "🌾 Fertilidad NPK",
     "🌱 Agroecología",
@@ -1271,40 +1010,26 @@ codigo_enfen = (2 if "alerta" in contexto_fen["estado"].lower()
 ])
 
 # ============================================================
-# DASHBOARD GENERAL  (Nivel 2 + 4)
+# DASHBOARD GENERAL
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
 
-    # ── 5 métricas principales ────────────────────────────────
     col1, col2, col3, col4, col5 = st.columns(5)
     u = UMBRALES[cultivo]
     with col1:
-        delta_ndvi = f"{ndvi_val - u['NDVI_min']:.2f}" if ndvi_val > u['NDVI_min'] else "crítico"
-        st.metric("🌱 NDVI actual", f"{ndvi_val:.2f}", delta=delta_ndvi)
+        st.metric("🌱 NDVI actual", f"{ndvi_val:.2f}")
     with col2:
-        delta_temp = "óptima" if u['temp_min'] <= temp_val <= u['temp_max'] else "alerta"
-        st.metric("🌡️ Temperatura", f"{temp_val:.1f} °C", delta=delta_temp)
+        st.metric("🌡️ Temperatura", f"{temp_val:.1f} °C")
     with col3:
-        delta_hum = "normal" if u['humedad_min'] <= humedad_val <= u['humedad_max'] else "crítica"
-        st.metric("💧 Humedad suelo", f"{humedad_val:.2f}", delta=delta_hum)
+        st.metric("💧 Humedad suelo", f"{humedad_val:.2f}")
     with col4:
         st.metric("📅 Fase fenológica", fase_fenologica.capitalize())
     with col5:
-        st.metric("🚨 Vulnerabilidad FEN", f"{vuln_score}/10",
-                  delta=("CRÍTICA" if vuln_score > 7 else "ALTA" if vuln_score > 5 else "MODERADA"))
-
-    # Semáforo de vulnerabilidad
-    if vuln_score > 7:
-        st.error(f"🔴 Vulnerabilidad FEN CRÍTICA ({vuln_score}/10) — Implementa medidas de emergencia.")
-    elif vuln_score > 5:
-        st.warning(f"🟠 Vulnerabilidad FEN ALTA ({vuln_score}/10) — Refuerza monitoreo y drenajes.")
-    else:
-        st.info(f"🟡 Vulnerabilidad FEN MODERADA ({vuln_score}/10) — Mantén monitoreo quincenal.")
+        st.metric("🌧️ Precipitación", f"{precip_actual:.1f} mm")
 
     st.markdown("---")
 
-    # ── NIVEL 2: Pronóstico GFS próxima semana ────────────────
     st.subheader("🌤️ Pronóstico GFS — Próximos 7 días")
     st.warning(f"**Alerta esta semana:** {pronostico_gfs['alerta_esta_semana']}")
 
@@ -1332,13 +1057,11 @@ with tab_dashboard:
 
     st.markdown("---")
 
-    # ── Series históricas ─────────────────────────────────────
     st.subheader("Evolución de Índices Históricos")
     if not df_ndvi.empty and not df_temp.empty and not df_precip.empty:
         fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
         axes[0].plot(df_ndvi['date'], df_ndvi['ndvi'], 'g-', linewidth=2, label='NDVI')
         axes[0].axhline(u['NDVI_min'], color='red', linestyle='--', label=f'Umbral ({u["NDVI_min"]})')
-        axes[0].axhline(u['NDVI_min_fen'], color='orange', linestyle=':', label=f'Umbral FEN ({u["NDVI_min_fen"]})')
         axes[0].set_ylabel('NDVI'); axes[0].legend(fontsize=8)
         axes[1].plot(df_temp['date'], df_temp['temp'], 'r-')
         axes[1].axhline(u['temp_min'], color='blue', linestyle='--')
@@ -1358,7 +1081,6 @@ with tab_dashboard:
         fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
         axes[0].plot(fechas_sim, ndvi_sim, 'g-')
         axes[0].axhline(u['NDVI_min'], color='red', linestyle='--')
-        axes[0].axhline(u['NDVI_min_fen'], color='orange', linestyle=':')
         axes[0].set_ylabel('NDVI (simulado)')
         axes[1].plot(fechas_sim, temp_sim, 'r-')
         axes[1].set_ylabel('Temp (simulada)')
@@ -1368,7 +1090,7 @@ with tab_dashboard:
         st.pyplot(fig)
 
 # ============================================================
-# MAPA DE RIESGO  (estructura original de app.py preservada)
+# MAPA DE RIESGO
 # ============================================================
 with tab_mapas:
     st.header("🗺️ Mapa de Riesgo Climático Interactivo")
@@ -1387,7 +1109,6 @@ with tab_mapas:
 
         gee_ok_map = st.session_state.get("gee_authenticated", False) and usar_gee and GEE_AVAILABLE
 
-        # ── Parámetros de visualización por índice ────────────────
         if indice == "NDVI":
             vis = {'min':0.0,'max':0.8,'palette':['#d73027','#f46d43','#fdae61','#fee08b','#d9ef8b','#a6d96a','#66bd63','#1a9850']}
             umbral_critico = UMBRALES[cultivo].get('NDVI_min', 0.3)
@@ -1416,7 +1137,6 @@ with tab_mapas:
         critical_coords = []
         tile_url = None
 
-        # ── Capa GEE (solo si autenticado) ───────────────────────
         if gee_ok_map:
             with st.spinner(f"⏳ Cargando capa {indice} desde GEE…"):
                 try:
@@ -1451,7 +1171,6 @@ with tab_mapas:
 
         num_criticos = len(critical_coords)
 
-        # ── Construir mapa folium (SIEMPRE) ──────────────────────
         bounds = gdf.total_bounds
         c_lat, c_lon, zoom = obtener_zoom_con_margen(bounds)
         mapa = folium.Map(location=[c_lat, c_lon], zoom_start=zoom, control_scale=True, tiles=None)
@@ -1469,7 +1188,6 @@ with tab_mapas:
             folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2',
                              name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
 
-        # Polígono parcela
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
         popup_poly_html = (
             f'<div style="font-family:Arial;min-width:210px;">'
@@ -1479,9 +1197,7 @@ with tab_mapas:
             f'<table style="font-size:13px;width:100%;">'
             f'<tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr>'
             f'<tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr>'
-            f'<tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr>'
-            f'<tr><td>🚨 Vuln. FEN</td><td><b>{vuln_score}/10</b></td></tr>'
-            f'</table>'
+            f'</td></table>'
             f'<hr style="margin:6px 0;">'
             f'<div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div>'
             f'</div>'
@@ -1491,7 +1207,6 @@ with tab_mapas:
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
                        popup=folium.Popup(popup_poly_html, max_width=250)).add_to(mapa)
 
-        # Puntos críticos
         for lon_pt, lat_pt in critical_coords:
             popup_pt = (f'<div style="font-family:Arial;"><b>⚠️ Punto Crítico</b><br>'
                         f'{indice}: bajo umbral<br>Lat:{lat_pt:.5f}<br>Lon:{lon_pt:.5f}<br>'
@@ -1501,7 +1216,6 @@ with tab_mapas:
                                 popup=folium.Popup(popup_pt, max_width='100%'),
                                 tooltip=f'Crítico: {lat_pt:.4f},{lon_pt:.4f}').add_to(mapa)
 
-        # Label central
         clat_m = gdf.geometry.centroid.y.iloc[0]
         clon_m = gdf.geometry.centroid.x.iloc[0]
         gee_badge = "🛰️ GEE" if gee_ok_map and tile_url else "🗺️ OSM"
@@ -1509,12 +1223,11 @@ with tab_mapas:
             f'<div style="background:white;border:2px solid #2ca02c;border-radius:6px;'
             f'padding:3px 8px;font-size:11px;font-weight:bold;box-shadow:2px 2px 4px rgba(0,0,0,0.3);white-space:nowrap;">'
             f'{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo} · {gee_badge}<br>'
-            f'<span style="font-size:10px;color:#555;">{indice}: {mean_val_map:.3f} | Riesgo {riesgo_map} | FEN {vuln_score}/10</span></div>'
+            f'<span style="font-size:10px;color:#555;">{indice}: {mean_val_map:.3f} | Riesgo {riesgo_map}</span></div>'
         )
         folium.Marker(location=[clat_m, clon_m],
                       icon=folium.DivIcon(html=label_html, icon_size=(240,35), icon_anchor=(120,17))).add_to(mapa)
 
-        # Panel flotante
         leyenda_html = "".join(f'<span style="color:{c};">■</span> {txt}&nbsp;&nbsp;' for c, txt in leyenda)
         panel_html = (
             f'<div style="position:fixed;bottom:40px;left:40px;z-index:1000;background:white;'
@@ -1527,7 +1240,6 @@ with tab_mapas:
             + (f'<b>NDRE:</b> {ndre_val:.3f}<br>' if ndre_val is not None else '')
             + f'<b>Área:</b> {area_ha:.2f} ha<br>'
             f'<b>Puntos críticos:</b> {num_criticos}<br>'
-            f'<b>🚨 Vuln. FEN:</b> {vuln_score}/10'
             f'<hr style="margin:6px 0;">'
             f'{leyenda_html}'
             f'<hr style="margin:6px 0;">'
@@ -1541,11 +1253,9 @@ with tab_mapas:
 
         if not gee_ok_map:
             st.info("🗺️ Mapa base activo. Autenticá GEE en el panel lateral para agregar capas satelitales Sentinel-2.")
-        st.caption(f"📊 **{indice}:** {mean_val_map:.3f}{unidad} · Riesgo: **{riesgo_map}** · "
-                   f"{num_criticos} puntos críticos · Vuln. FEN: **{vuln_score}/10**")
 
 # ============================================================
-# MONITOREO FENOLÓGICO  (Nivel 3)
+# MONITOREO FENOLÓGICO
 # ============================================================
 with tab_monitoreo:
     st.header("📈 Monitoreo Detallado")
@@ -1558,134 +1268,116 @@ with tab_monitoreo:
         st.metric("Precipitación rec.",f"{precip_actual:.1f} mm")
     with col2:
         st.subheader("Comparativa con Umbrales")
-        st.write(f"**NDVI:** {'🟢' if ndvi_val > umbral['NDVI_min'] else '🔴'} Mínimo {umbral['NDVI_min']} (FEN: {umbral['NDVI_min_fen']})")
+        st.write(f"**NDVI:** {'🟢' if ndvi_val > umbral['NDVI_min'] else '🔴'} Mínimo {umbral['NDVI_min']}")
         st.write(f"**Temperatura:** {'🟢' if umbral['temp_min']<=temp_val<=umbral['temp_max'] else '🔴'} Rango {umbral['temp_min']}-{umbral['temp_max']} °C")
         st.write(f"**Humedad:** {'🟢' if umbral['humedad_min']<=humedad_val<=umbral['humedad_max'] else '🔴'} Rango {umbral['humedad_min']:.2f}-{umbral['humedad_max']:.2f}")
 
     if not df_ndvi.empty:
         fig, ax = plt.subplots(figsize=(10, 4))
         ax.plot(df_ndvi['date'], df_ndvi['ndvi'], 'g-o', markersize=3, label='NDVI')
-        ax.axhline(umbral['NDVI_min'],     color='red',    linestyle='--', label=f'Umbral normal ({umbral["NDVI_min"]})')
-        ax.axhline(umbral['NDVI_min_fen'], color='orange', linestyle=':',  label=f'Umbral FEN ({umbral["NDVI_min_fen"]})')
+        ax.axhline(umbral['NDVI_min'], color='red', linestyle='--', label=f'Umbral normal ({umbral["NDVI_min"]})')
         ax.set_ylabel('NDVI'); ax.legend()
         st.pyplot(fig)
 
-    # ── NIVEL 3: Contexto FEN histórico ──────────────────────
-    st.markdown("---")
-    st.subheader(f"🌊 Contexto FEN — Zona de referencia: **{zona_ref}**")
-    hist_fen = RIESGO_HISTORICO_FEN[zona_ref]
-    ndvi_fen = hist_fen["ndvi_promedio_fen"]
-
-    col_f1, col_f2, col_f3 = st.columns(3)
-    with col_f1:
-        st.metric("NDVI actual",              f"{ndvi_val:.2f}")
-    with col_f2:
-        st.metric("NDVI histórico años FEN",  f"{ndvi_fen:.2f}", delta=f"referencia {zona_ref}")
-    with col_f3:
-        st.metric("Pérdidas históricas FEN",  f"{hist_fen['perdidas_pct']}%")
-
-    delta_ndvi_fen = ((ndvi_val - ndvi_fen) / ndvi_fen) * 100
-    if delta_ndvi_fen < -10:
-        st.error(f"🔴 NDVI {delta_ndvi_fen:.1f}% **bajo** vs promedio FEN histórico en {zona_ref}. "
-                 f"Riesgo elevado de pérdidas similares a años FEN anteriores ({hist_fen['perdidas_pct']}%).")
-    elif delta_ndvi_fen < 0:
-        st.warning(f"🟡 NDVI {delta_ndvi_fen:.1f}% bajo vs promedio FEN histórico en {zona_ref}. "
-                   f"Monitorear de cerca.")
-    else:
-        st.success(f"🟢 NDVI {delta_ndvi_fen:+.1f}% **mejor** que el promedio FEN histórico en {zona_ref}. "
-                   f"Condiciones actuales más favorables.")
-
-    # Gráfico comparativo
-    fig_fen, ax_fen = plt.subplots(figsize=(8, 3))
-    zonas  = list(RIESGO_HISTORICO_FEN.keys())
-    ndvis  = [RIESGO_HISTORICO_FEN[z]["ndvi_promedio_fen"] for z in zonas]
-    colors = ['red' if z == zona_ref else 'steelblue' for z in zonas]
-    bars = ax_fen.bar(zonas, ndvis, color=colors, alpha=0.8)
-    ax_fen.axhline(ndvi_val, color='green', linestyle='--', linewidth=2, label=f'NDVI actual ({ndvi_val:.2f})')
-    ax_fen.axhline(umbral['NDVI_min_fen'], color='orange', linestyle=':', linewidth=1.5, label=f'Umbral FEN ({umbral["NDVI_min_fen"]})')
-    ax_fen.set_title('NDVI promedio durante años FEN por zona (zona actual en rojo)')
-    ax_fen.set_ylabel('NDVI')
-    ax_fen.legend(fontsize=8)
-    ax_fen.tick_params(axis='x', rotation=20)
-    plt.tight_layout()
-    st.pyplot(fig_fen)
-
 # ============================================================
-# ALERTAS IA  (Nivel 5)
+# ALERTAS IA
 # ============================================================
 with tab_alerta:
-    st.header("⚠️ Alertas IA con Contexto FEN Integrado")
+    st.header("⚠️ Alertas IA con Datos de Invernadero")
 
-    # Mostrar resumen de contexto antes del botón
-    with st.expander("📋 Contexto que se enviará a la IA (Nivel 5 — FEN completo)", expanded=False):
-        st.write(f"**Estado ENFEN:** {contexto_fen['estado']}")
-        st.write(f"**Anomalía TSM:** +{contexto_fen['anomalia_tsm']}°C")
-        st.write(f"**Mes crítico:** {contexto_fen['mes_critico']}")
-        st.write(f"**Score vulnerabilidad FEN:** {vuln_score}/10")
-        st.write(f"**Pronóstico semana:** {pronostico_gfs['alerta_esta_semana']}")
-        st.write(f"**Zona ref. histórica:** {zona_ref} — NDVI FEN prom.: {RIESGO_HISTORICO_FEN[zona_ref]['ndvi_promedio_fen']}")
+    with st.expander("📋 Datos que se enviarán a la IA", expanded=False):
+        st.write(f"**Cultivo:** {cultivo} - Fase: {fase_fenologica}")
+        st.write(f"**NDVI:** {ndvi_val:.2f}")
+        st.write(f"**Temperatura:** {temp_val:.1f}°C")
+        st.write(f"**Humedad:** {humedad_val:.2f}")
+        st.write(f"**Precipitación:** {precip_actual:.1f} mm")
+        st.write("**Datos de Estación Meteorológica (Simulada):**")
+        st.write(datos_estacion)
 
-    if st.button("🤖 Generar Alerta Avanzada con Contexto FEN", type="primary"):
-        with st.spinner("Consultando IA (Groq) con datos FEN integrados..."):
+    if st.button("🤖 Generar Alerta Avanzada", type="primary"):
+        with st.spinner("Consultando IA (Groq) con datos de invernadero..."):
             alerta = generar_alerta_detallada(
                 fase_fenologica, ndvi_val, temp_val, precip_actual, humedad_val,
                 cultivo, UMBRALES[cultivo],
-                contexto_fen=contexto_fen,
-                vuln_score=vuln_score,
                 pronostico_gfs=pronostico_gfs,
+                datos_estacion=datos_estacion,
             )
 
-        # Mostrar alerta estructurada
         st.markdown("### 🔔 Alerta Agronómica Integrada")
         st.markdown(alerta)
 
         st.markdown("---")
-        st.markdown(f"**📡 Contexto ENFEN:** {contexto_fen['estado']} · Mes crítico: {contexto_fen['mes_critico']} · Lag: {contexto_fen['lag_meses']} meses")
-        st.markdown(f"**🚨 Vulnerabilidad a FEN calculada:** {vuln_score}/10")
         st.markdown(f"**🌤️ Pronóstico próxima semana:** {pronostico_gfs['alerta_esta_semana']}")
-        ndvi_fen_hist = RIESGO_HISTORICO_FEN[zona_ref]['ndvi_promedio_fen']
-        delta_pct = ((ndvi_val - ndvi_fen_hist) / ndvi_fen_hist) * 100
-        st.markdown(f"**📊 Histórico FEN zona {zona_ref}:** NDVI prom. {ndvi_fen_hist:.2f} · Delta actual: {delta_pct:+.1f}%")
 
         fecha_str = datetime.now().strftime('%Y%m%d_%H%M')
         texto_descarga = (
-            f"ALERTA FEN — {cultivo} — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
+            f"ALERTA — {cultivo} — {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
             f"{'='*60}\n\n{alerta}\n\n"
             f"{'='*60}\n"
-            f"Estado ENFEN: {contexto_fen['estado']}\n"
-            f"Score vulnerabilidad FEN: {vuln_score}/10\n"
+            f"Datos de Estación: {datos_estacion}\n"
             f"Pronóstico semana: {pronostico_gfs['alerta_esta_semana']}\n"
-            f"Delta NDVI vs FEN histórico ({zona_ref}): {delta_pct:+.1f}%\n"
         )
         st.download_button("📥 Descargar alerta completa",
                            data=texto_descarga,
-                           file_name=f"alerta_fen_{cultivo}_{fecha_str}.txt")
+                           file_name=f"alerta_{cultivo}_{fecha_str}.txt")
 
 # ============================================================
-# GOBERNANZA
+# ESTACIÓN METEOROLÓGICA (NUEVA PESTAÑA)
 # ============================================================
-with tab_gobernanza:
-    st.subheader("📄 Gobernanza para la Cadena de Ají y Rocoto")
+with tab_estacion:
+    st.header("🌦️ Datos de Estación Meteorológica")
+    st.markdown("Datos simulados de una estación meteorológica para el monitoreo del invernadero.")
+
+    if st.button("🔄 Actualizar Datos Simulados"):
+        datos_estacion = obtener_datos_estacion_simulada()
+        st.session_state['datos_estacion'] = datos_estacion
+        st.rerun()
+
+    # Usar datos de sesión o generar nuevos
+    if 'datos_estacion' not in st.session_state:
+        st.session_state['datos_estacion'] = datos_estacion
+
+    estacion_data = st.session_state['datos_estacion']
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
+        st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
+    with col2:
+        st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
+        st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
+    with col3:
+        st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
+        st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
+
+    st.subheader("🧪 Análisis de Fertilidad del Suelo")
+    col_n, col_p, col_k = st.columns(3)
+    with col_n:
+        st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
+    with col_p:
+        st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
+    with col_k:
+        st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
+
+    st.markdown("---")
+    st.subheader("📈 Interpretación de Datos")
     st.markdown("""
-    **Estructura sugerida ante FEN:**
-    - **Comité de Gestión de Riesgos Climáticos** (productor, técnico, SENASA)
-    - Frecuencia de monitoreo: **semanal** durante Alerta FEN, quincenal en Vigilancia
-    - Canales de alerta: WhatsApp, plataforma web, radio comunitaria
-    - Medidas preventivas FEN: drenaje, pólizas de seguro agrícola, fondo de emergencia
-    - Coordinación con ENFEN, SENAMHI, Ministerio de Agricultura
+    - **Temperatura y Humedad:** Optimizar ventilación y riego según valores.
+    - **Radiación Solar:** Ajustar sombreado para evitar estrés térmico.
+    - **pH del Suelo:** Rango ideal 5.5-7.0 para la mayoría de hortalizas.
+    - **Materia Orgánica:** Mejorar la estructura del suelo y retención de agua.
+    - **Fertilidad:** Ajustar fertilización según deficiencias de N-P-K.
     """)
-    if st.button("Descargar Gobernanza (PDF)"):
-        try:
-            from reportlab.lib.pagesizes import letter
-            from reportlab.pdfgen import canvas as rl_canvas
-            buf = BytesIO()
-            c = rl_canvas.Canvas(buf, pagesize=letter)
-            c.drawString(100, 750, "GOBERNANZA PARA RIESGOS CLIMÁTICOS — FEN")
-            c.drawString(100, 730, "Cadena de Ají y Rocoto · Perú")
-            c.save(); buf.seek(0)
-            st.download_button("📄 PDF", data=buf, file_name="gobernanza_fen.pdf")
-        except ImportError:
-            st.error("Instala reportlab: pip install reportlab")
+
+    if st.button("📥 Exportar Datos de Estación"):
+        df_estacion = pd.DataFrame([estacion_data])
+        st.download_button(
+            "⬇️ Descargar CSV",
+            data=df_estacion.to_csv(index=False),
+            file_name=f"estacion_meteorologica_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+        )
+
 
 # ============================================================
 # EXPORTAR
@@ -1696,29 +1388,24 @@ with tab_export:
         st.download_button("⬇️ Descargar GeoJSON", data=gdf.to_json(), file_name="parcela.geojson")
     if not df_ndvi.empty:
         st.download_button("⬇️ Serie NDVI CSV", data=df_ndvi.to_csv(index=False), file_name="ndvi.csv")
-    # Exportar resumen FEN
-    resumen_fen = (
-        f"RESUMEN FEN — {cultivo} — {datetime.now().strftime('%Y-%m-%d')}\n"
-        f"Estado ENFEN: {contexto_fen['estado']}\n"
-        f"Anomalía TSM: +{contexto_fen['anomalia_tsm']}°C\n"
-        f"Score vulnerabilidad: {vuln_score}/10\n"
-        f"Zona ref.: {zona_ref}\n"
-        f"Delta NDVI vs FEN: {((ndvi_val - RIESGO_HISTORICO_FEN[zona_ref]['ndvi_promedio_fen']) / RIESGO_HISTORICO_FEN[zona_ref]['ndvi_promedio_fen'])*100:+.1f}%\n"
-        f"Alerta GFS semana: {pronostico_gfs['alerta_esta_semana']}\n"
+    resumen = (
+        f"RESUMEN — {cultivo} — {datetime.now().strftime('%Y-%m-%d')}\n"
+        f"NDVI: {ndvi_val:.2f}\n"
+        f"Temperatura: {temp_val:.1f}°C\n"
+        f"Humedad: {humedad_val:.2f}\n"
+        f"Precipitación: {precip_actual:.1f} mm\n"
+        f"Área: {area_ha:.2f} ha\n"
+        f"Pronóstico semana: {pronostico_gfs['alerta_esta_semana']}\n"
+        f"Datos de Estación: {datos_estacion}\n"
     )
-    st.download_button("⬇️ Resumen FEN TXT", data=resumen_fen, file_name="resumen_fen.txt")
+    st.download_button("⬇️ Resumen TXT", data=resumen, file_name="resumen.txt")
 
-    # ── Exportar para biomod2 (R) ─────────────────────────────
     st.markdown("---")
     st.subheader("📦 Exportar para biomod2 (R)")
-    st.markdown(
-        "Genera un CSV con puntos dentro de la parcela y variables ambientales "
-        "para modelado de nicho ecológico en R con `biomod2`."
-    )
     if st.button("🔬 Generar archivo biomod2"):
         bounds = gdf.total_bounds
         minx, miny, maxx, maxy = bounds
-        step = 0.001  # ~111 m — ajustable
+        step = 0.001
         points = []
         for x in np.arange(minx, maxx, step):
             for y in np.arange(miny, maxy, step):
@@ -1733,10 +1420,7 @@ with tab_export:
             df_points['temperatura_C']     = temp_val
             df_points['precipitacion_mm']  = precip_actual
             df_points['humedad_suelo']     = humedad_val
-            df_points['elevacion_m']       = elevation_est
-            df_points['rendimiento_t_ha']  = predecir_rendimiento(
-                ndvi_val, precip_actual, temp_val, codigo_enfen
-            )
+            df_points['rendimiento_t_ha']  = predecir_rendimiento(ndvi_val, precip_actual, temp_val)
             umbral_ndvi = UMBRALES[cultivo]['NDVI_min']
             df_points['Presence'] = (df_points['NDVI'] >= umbral_ndvi).astype(int)
             st.download_button(
@@ -1748,158 +1432,13 @@ with tab_export:
             st.success(f"✅ {len(df_points)} puntos generados dentro de la parcela.")
 
 # ============================================================
-# NIVEL 6 — PESTAÑA "📊 Análisis FEN"
-# ============================================================
-with tab_fen:
-    st.header("📊 Análisis FEN — El Niño Costero")
-    st.markdown(f"**Estado actual:** {contexto_fen['estado']} · "
-                f"Anomalía TSM +{contexto_fen['anomalia_tsm']}°C · "
-                f"Riesgo agrícola: **{contexto_fen['riesgo_agricola']}**")
-
-    # ── 1. Tabla comparativa NDVI actual vs histórico FEN ────
-    st.subheader("1️⃣ Tabla comparativa NDVI: actual vs años FEN")
-    tabla_data = []
-    for zona, d in RIESGO_HISTORICO_FEN.items():
-        delta = ((ndvi_val - d["ndvi_promedio_fen"]) / d["ndvi_promedio_fen"]) * 100
-        estado_icon = "🔴" if delta < -10 else ("🟡" if delta < 0 else "🟢")
-        tabla_data.append({
-            "Zona":             zona,
-            "Región":           d["region"],
-            "NDVI actual":      f"{ndvi_val:.2f}",
-            "NDVI prom. FEN":   f"{d['ndvi_promedio_fen']:.2f}",
-            "Δ NDVI (%)":       f"{delta:+.1f}%",
-            "Pérdidas hist. FEN": f"{d['perdidas_pct']}%",
-            "Estado":           estado_icon,
-        })
-    df_tabla = pd.DataFrame(tabla_data)
-    st.dataframe(df_tabla, use_container_width=True)
-
-    st.markdown("---")
-
-    # ── 2. Gráfico de vulnerabilidad FEN por zona ─────────────
-    st.subheader("2️⃣ Vulnerabilidad FEN por zona — comparativa")
-    zonas_names = list(RIESGO_HISTORICO_FEN.keys())
-    vuln_por_zona = []
-    for z in zonas_names:
-        d = RIESGO_HISTORICO_FEN[z]
-        # Score simplificado por zona (sin parcela específica)
-        score_z = min(10, round(
-            (1 - d["ndvi_promedio_fen"]) * 5 + d["perdidas_pct"] / 20, 1
-        ))
-        vuln_por_zona.append(score_z)
-
-    colores_vuln = ['#e74c3c' if v > 7 else '#f39c12' if v > 5 else '#2ecc71' for v in vuln_por_zona]
-    fig_v, ax_v = plt.subplots(figsize=(9, 4))
-    bars_v = ax_v.bar(zonas_names, vuln_por_zona, color=colores_vuln, alpha=0.85, edgecolor='white')
-    ax_v.axhline(7, color='red',    linestyle='--', alpha=0.6, label='Umbral crítico (7)')
-    ax_v.axhline(5, color='orange', linestyle='--', alpha=0.6, label='Umbral alto (5)')
-    ax_v.axhline(vuln_score, color='blue', linestyle='-', linewidth=2,
-                 label=f'Tu parcela ({vuln_score}/10)')
-    ax_v.set_ylim(0, 10)
-    ax_v.set_ylabel('Score de vulnerabilidad FEN (0-10)')
-    ax_v.set_title('Vulnerabilidad estimada a FEN por zona peruana')
-    ax_v.legend(fontsize=8)
-    for bar, val in zip(bars_v, vuln_por_zona):
-        ax_v.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.15,
-                  f'{val:.1f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
-    ax_v.tick_params(axis='x', rotation=15)
-    plt.tight_layout()
-    st.pyplot(fig_v)
-
-    st.markdown("---")
-
-    # ── 3. Timeline del lag de impacto ────────────────────────
-    st.subheader("3️⃣ Timeline del lag de impacto: océano → atmósfera → cultivo")
-    lag = contexto_fen["lag_meses"]
-    etapas = [
-        ("🌊 Calentamiento oceánico\n(Niño 1+2)",  0),
-        ("💨 Anomalía atmosférica\n(ZCIT / corrientes)", 1),
-        ("🌧️ Cambio en precipitación\n(CHIRPS detectable)", 2),
-        (f"🌱 Impacto en cultivo\n(NDVI, rendimiento)", lag),
-    ]
-    fig_tl, ax_tl = plt.subplots(figsize=(10, 3))
-    for i, (etapa, mes) in enumerate(etapas):
-        color = '#e74c3c' if i == len(etapas)-1 else '#3498db'
-        ax_tl.scatter(mes, 0.5, s=300, color=color, zorder=3)
-        ax_tl.text(mes, 0.65, etapa, ha='center', fontsize=8, wrap=True)
-        if i > 0:
-            ax_tl.annotate('', xy=(mes, 0.5), xytext=(etapas[i-1][1], 0.5),
-                            arrowprops=dict(arrowstyle='->', color='gray', lw=1.5))
-    ax_tl.set_xlim(-0.5, lag + 0.5)
-    ax_tl.set_ylim(0, 1.2)
-    ax_tl.set_xlabel('Meses desde inicio del evento FEN')
-    ax_tl.set_yticks([])
-    ax_tl.set_title(f'Lag de impacto estimado: {lag} meses (evento → cultivo)')
-    ax_tl.spines[['left','top','right']].set_visible(False)
-    plt.tight_layout()
-    st.pyplot(fig_tl)
-
-    st.markdown("---")
-
-    # ── 4. Heatmap simulado de riesgo FEN por zona ───────────
-    st.subheader("4️⃣ Mapa de zonas críticas por FEN (heatmap de riesgo)")
-    zonas_lat = [d["lat_ref"] for d in RIESGO_HISTORICO_FEN.values()]
-    zonas_lon = [d["lon_ref"] for d in RIESGO_HISTORICO_FEN.values()]
-    zonas_riesgo = [d["perdidas_pct"] / 100 for d in RIESGO_HISTORICO_FEN.values()]
-
-    fig_map, ax_map = plt.subplots(figsize=(6, 8))
-    ax_map.set_facecolor('#d4e6f1')
-    sc = ax_map.scatter(zonas_lon, zonas_lat, c=zonas_riesgo,
-                        cmap='RdYlGn_r', s=400, alpha=0.85,
-                        vmin=0.2, vmax=0.6, edgecolors='black', linewidths=0.5)
-    plt.colorbar(sc, ax=ax_map, label='Pérdidas históricas FEN (%)')
-    for z, lat, lon in zip(RIESGO_HISTORICO_FEN.keys(), zonas_lat, zonas_lon):
-        ax_map.annotate(z, (lon, lat), textcoords='offset points',
-                        xytext=(5, 5), fontsize=9, fontweight='bold')
-    # Tu parcela
-    ax_map.scatter([_lon], [_lat], c='blue', s=200, marker='*',
-                   zorder=5, label='Tu parcela')
-    ax_map.set_xlabel('Longitud')
-    ax_map.set_ylabel('Latitud')
-    ax_map.set_title('Zonas críticas FEN en el Perú\n(color = pérdidas históricas estimadas)')
-    ax_map.legend()
-    plt.tight_layout()
-    st.pyplot(fig_map)
-
-    st.markdown("---")
-
-    # ── 5. Predicción de rendimiento con contexto FEN ─────────
-    st.subheader("5️⃣ Predicción de rendimiento con contexto FEN")
-    rendimiento = predecir_rendimiento(ndvi_val, precip_actual, temp_val, codigo_enfen)
-    col_r1, col_r2, col_r3 = st.columns(3)
-    with col_r1:
-        st.metric("🌶️ Rendimiento estimado", f"{rendimiento:.2f} t/ha")
-    with col_r2:
-        st.metric("📊 Código ENFEN",
-                  "🔴 Alerta" if codigo_enfen==2 else "🟡 Vigilancia" if codigo_enfen==1 else "🟢 Neutro")
-    with col_r3:
-        st.metric("📏 Margen de confianza", "± 20%")
-
-    if rendimiento >= 5.0:
-        st.success("✅ Expectativa **alta**. Condiciones favorables a pesar del FEN.")
-    elif rendimiento >= 3.0:
-        st.warning("⚠️ Expectativa **media**. Aplica medidas de mitigación FEN.")
-    else:
-        st.error("🔴 Expectativa **baja**. Alto riesgo FEN. Considera asegurar cultivos y diversificar.")
-
-    st.caption(f"Fuente FEN: {contexto_fen.get('fuente', 'ENFEN')} · "
-               f"Mes crítico: {contexto_fen['mes_critico']} · "
-               f"Lag: {contexto_fen['lag_meses']} meses")
-
-# ============================================================
-# PESTAÑA DEM (RELIEVE)
+# DEM (RELIEVE)
 # ============================================================
 with tab_dem:
     st.header("🗻 Análisis de Relieve — OpenTopography")
-    st.markdown(
-        "Descarga y visualiza el **Modelo Digital de Elevación (DEM)** de tu parcela. "
-        "La elevación media se usa automáticamente para refinar el **score de vulnerabilidad FEN**."
-    )
-
     if not OPENTOPOGRAPHY_AVAILABLE:
         st.error("❌ requests no disponible — módulo DEM inactivo.")
     else:
-        # Permitir ingresar la key manualmente si no está en secrets
         _ot_key = OPENTOPOGRAPHY_API_KEY
         if not _ot_key:
             _ot_key = st.session_state.get("ot_api_key_manual", "")
@@ -1913,8 +1452,7 @@ with tab_dem:
                 st.session_state["ot_api_key_manual"] = _key_input
                 _ot_key = _key_input
             if not _ot_key:
-                st.info("Ingresá tu API key de OpenTopography para descargar el DEM. "
-                        "Es gratuita: [opentopography.org/developers](https://opentopography.org/developers)")
+                st.info("Ingresá tu API key de OpenTopography para descargar el DEM.")
                 st.stop()
 
         bounds_dem = gdf.total_bounds
@@ -1922,7 +1460,7 @@ with tab_dem:
         with col_ds:
             resolucion = st.selectbox("Resolución del DEM", list(_DATASETS_DEM.keys()))
         with col_btn:
-            st.write("")  # alinear verticalmente
+            st.write("")
             cargar_dem = st.button("📥 Cargar DEM", type="primary")
 
         if cargar_dem:
@@ -1932,15 +1470,8 @@ with tab_dem:
             if dem is not None:
                 st.session_state["dem_data"]     = dem
                 st.session_state["dem_dataset"]  = resolucion
-                # Actualizar elevación y recalcular score FEN en vivo
-                elevation_est = float(np.nanmean(dem.values))
-                vuln_score    = calcular_vulnerabilidad_fen(
-                    gdf, cultivo, ndvi_val, temp_val, precip_actual, elevation_est
-                )
-                st.success(
-                    f"✅ DEM cargado · Elevación media: **{elevation_est:.0f} m** · "
-                    f"Score FEN actualizado: **{vuln_score}/10**"
-                )
+                elevation_mean = float(np.nanmean(dem.values))
+                st.success(f"✅ DEM cargado · Elevación media: **{elevation_mean:.0f} m**")
 
         if st.session_state.get("dem_data") is not None:
             dem       = st.session_state["dem_data"]
@@ -1950,75 +1481,49 @@ with tab_dem:
             elev_mean = float(np.nanmean(dem.values))
             elev_range = elev_max - elev_min
 
-            # ── Métricas de elevación ─────────────────────────────
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("⬇️ Elevación mínima",  f"{elev_min:.0f} m")
             c2.metric("⬆️ Elevación máxima",  f"{elev_max:.0f} m")
             c3.metric("📏 Elevación media",   f"{elev_mean:.0f} m")
             c4.metric("↕️ Rango altitudinal", f"{elev_range:.0f} m")
 
-            # Contexto agronómico de la elevación
-            if elev_mean < 500:
-                st.info(f"📍 Parcela en **zona costera** ({elev_mean:.0f} m) — mayor exposición a FEN directo.")
-            elif elev_mean < 2000:
-                st.info(f"📍 Parcela en **zona de transición** ({elev_mean:.0f} m) — riesgo FEN moderado.")
-            else:
-                st.info(f"📍 Parcela en **sierra** ({elev_mean:.0f} m) — lluvias superiores posibles en FEN.")
-
             st.markdown("---")
-
-            # ── Selector de visualización ─────────────────────────
             tipo_vis = st.radio(
                 "Visualización", ["🗺️ Mapa 2D interactivo", "📐 Modelo 3D interactivo"],
                 horizontal=True
             )
 
-            if tipo_vis == "🗺️ Mapa 2D interactivo":
-                if not FOLIUM_OK:
-                    st.error("Instala folium: pip install folium streamlit-folium")
+            if tipo_vis == "🗺️ Mapa 2D interactivo" and FOLIUM_OK:
+                with st.spinner("Generando mapa 2D con overlay DEM..."):
+                    mapa_dem = generar_mapa_folium_dem(gdf, dem, ds_label)
+                if FOLIUM_STATIC_OK:
+                    folium_static(mapa_dem, width=900, height=620)
                 else:
-                    with st.spinner("Generando mapa 2D con overlay DEM..."):
-                        mapa_dem = generar_mapa_folium_dem(gdf, dem, ds_label)
-                    if FOLIUM_STATIC_OK:
-                        folium_static(mapa_dem, width=900, height=620)
-                    else:
-                        components.html(mapa_dem.get_root().render(), height=620)
-                    st.caption(
-                        f"DEM: {ds_label} · Escala de colores: verde oscuro (bajo) → blanco (cima) · "
-                        "Amarillo = contorno de parcela"
-                    )
-
-            else:  # Modelo 3D
+                    components.html(mapa_dem.get_root().render(), height=620)
+            elif tipo_vis == "📐 Modelo 3D interactivo":
                 with st.spinner("Generando modelo 3D de elevación..."):
                     fig_3d, _mn, _mx, _me = generar_grafico_3d_dem(dem)
                 if fig_3d is not None:
                     st.plotly_chart(fig_3d, use_container_width=True)
-                    st.caption(
-                        f"Superficie 3D · Mín {_mn:.0f} m · Máx {_mx:.0f} m · "
-                        f"Media {_me:.0f} m · Dataset: {ds_label}"
-                    )
 
-            # ── Perfil de elevación (corte transversal) ───────────
-            with st.expander("📈 Ver perfil de elevación (corte transversal este-oeste)"):
-                try:
-                    arr_2d = dem.values.squeeze() if dem.values.ndim > 2 else dem.values
-                    fila_central = arr_2d[arr_2d.shape[0] // 2, :]
-                    x_lon = dem.x.values
-                    fig_p, ax_p = plt.subplots(figsize=(9, 3))
-                    ax_p.fill_between(x_lon, fila_central, alpha=0.4, color="saddlebrown")
-                    ax_p.plot(x_lon, fila_central, color="saddlebrown", linewidth=1.5)
-                    ax_p.axhline(elev_mean, color="blue", linestyle="--",
-                                 linewidth=1, label=f"Media {elev_mean:.0f} m")
-                    ax_p.set_xlabel("Longitud")
-                    ax_p.set_ylabel("Elevación (m)")
-                    ax_p.set_title("Perfil de elevación — corte central este-oeste")
-                    ax_p.legend(fontsize=8)
-                    plt.tight_layout()
-                    st.pyplot(fig_p)
-                except Exception as e:
-                    st.warning(f"No se pudo generar el perfil: {e}")
+            with st.expander("📈 Ver perfil de elevación"):
+                if XARRAY_OK:
+                    try:
+                        arr_2d = dem.values.squeeze() if dem.values.ndim > 2 else dem.values
+                        fila_central = arr_2d[arr_2d.shape[0] // 2, :]
+                        x_lon = dem.x.values
+                        fig_p, ax_p = plt.subplots(figsize=(9, 3))
+                        ax_p.fill_between(x_lon, fila_central, alpha=0.4, color="saddlebrown")
+                        ax_p.plot(x_lon, fila_central, color="saddlebrown", linewidth=1.5)
+                        ax_p.axhline(elev_mean, color="blue", linestyle="--", linewidth=1)
+                        ax_p.set_xlabel("Longitud")
+                        ax_p.set_ylabel("Elevación (m)")
+                        ax_p.set_title("Perfil de elevación")
+                        plt.tight_layout()
+                        st.pyplot(fig_p)
+                    except Exception as e:
+                        st.warning(f"No se pudo generar el perfil: {e}")
 
-            # ── Exportar DEM como CSV ──────────────────────────────
             with st.expander("💾 Exportar datos de elevación"):
                 try:
                     arr_flat = dem.values.squeeze().flatten()
@@ -2029,7 +1534,7 @@ with tab_dem:
                         "longitud":  lons_flat,
                         "elevacion_m": arr_flat,
                     }).dropna()
-                    st.dataframe(df_dem.head(200), use_container_width=True)
+                    st.dataframe(df_dem.head(200))
                     st.download_button(
                         "⬇️ Descargar DEM completo (CSV)",
                         data=df_dem.to_csv(index=False),
@@ -2039,18 +1544,10 @@ with tab_dem:
                     st.warning(f"Error exportando DEM: {e}")
 
 # ============================================================
-st.caption("Plataforma Pachamama — FEN Nivel 1-6 · DEM · Sentinel-2 · ERA5 · CHIRPS · ENFEN · GFS")
-
-# ============================================================
 # FERTILIDAD NPK POR BLOQUES
 # ============================================================
 with tab_npk:
     st.header("🌾 Fertilidad NPK por Bloques")
-    st.markdown(
-        "Divide la parcela en zonas, obtiene el NDVI real de GEE para cada bloque "
-        "y calcula la dosis de fertilizante N/P/K y el potencial de cosecha por zona."
-    )
-
     if st.button("🔬 Calcular fertilidad por bloque", type="primary"):
         with st.spinner(f"Dividiendo en {n_bloques} bloques y consultando GEE…"):
             gdf_bloques = dividir_parcela_en_bloques(gdf, n_bloques)
@@ -2080,7 +1577,6 @@ with tab_npk:
                 gdf_bloques['rend_t_ha']    = [r[0] for r in rends]
                 gdf_bloques['prod_total_t'] = [r[1] for r in rends]
 
-                # Métricas resumen
                 c1, c2, c3, c4 = st.columns(4)
                 ndvi_med = gdf_bloques['ndvi'].mean()
                 c1.metric("NDVI promedio",     f"{ndvi_med:.3f}")
@@ -2088,14 +1584,12 @@ with tab_npk:
                 c3.metric("Rend. medio (t/ha)",f"{gdf_bloques['rend_t_ha'].mean():.1f}")
                 c4.metric("Producción total",  f"{gdf_bloques['prod_total_t'].sum():.1f} t")
 
-                # Tabla
                 st.subheader("📋 Detalle por bloque")
                 display_cols = ['id_bloque','area_ha','ndvi','nivel',
                                 'N_kg_ha','P_kg_ha','K_kg_ha',
                                 'rend_t_ha','prod_total_t']
                 st.dataframe(gdf_bloques[display_cols].round(3), use_container_width=True)
 
-                # Mapa de calor NDVI por bloque
                 if FOLIUM_OK:
                     st.subheader("🗺️ Mapa de calor NDVI por bloque")
                     bounds_b = gdf_bloques.total_bounds
@@ -2110,8 +1604,7 @@ with tab_npk:
                         ndvi_b = row['ndvi'] if not np.isnan(row['ndvi']) else 0.3
                         norm_v = (ndvi_b - vmin) / max(vmax - vmin, 0.01)
                         r_, g_, b_, _ = cmap_fn(norm_v)
-                        hex_color = '#{:02x}{:02x}{:02x}'.format(
-                            int(r_*255), int(g_*255), int(b_*255))
+                        hex_color = '#{:02x}{:02x}{:02x}'.format(int(r_*255), int(g_*255), int(b_*255))
                         popup_txt = (f"Bloque {int(row.id_bloque)}<br>"
                                      f"NDVI: {ndvi_b:.3f}<br>"
                                      f"N: {int(row.N_kg_ha)} kg/ha · "
@@ -2125,10 +1618,8 @@ with tab_npk:
                             tooltip=f"Bloque {int(row.id_bloque)} · NDVI {ndvi_b:.3f}",
                             popup=folium.Popup(popup_txt, max_width=200),
                         ).add_to(m_npk)
-                    map_npk_html = m_npk.get_root().render()
-                    components.html(map_npk_html, height=500)
+                    components.html(m_npk.get_root().render(), height=500)
 
-                # Descarga
                 st.download_button(
                     "⬇️ Descargar CSV fertilidad",
                     data=gdf_bloques[display_cols].to_csv(index=False),
@@ -2141,11 +1632,6 @@ with tab_npk:
 # ============================================================
 with tab_agro:
     st.header("🌱 Agroecología — 10 Principios")
-    st.markdown(
-        "Recomendaciones agronómicas basadas en los **10 principios agroecológicos** "
-        "adaptadas al estado actual de la parcela y contexto FEN."
-    )
-
     col_a, col_b = st.columns(2)
     with col_a:
         if st.button("🌿 Recomendación por principio", type="primary"):
@@ -2175,8 +1661,6 @@ with tab_agro:
                 file_name=f"plan_agroecologico_{cultivo}.txt",
             )
 
-    # Indicadores de contexto visible
-    st.markdown("---")
     st.caption(
         f"📊 Contexto enviado a la IA — NDVI: {ndvi_val:.3f} · "
         f"Temp: {temp_val:.1f}°C · Humedad: {humedad_val:.2f} · "
@@ -2189,11 +1673,6 @@ with tab_agro:
 # ============================================================
 with tab_carbono:
     st.header("🌍 Carbono y Créditos de Carbono")
-    st.markdown(
-        "Estimación de carbono almacenado (t C/ha) y créditos de carbono "
-        "calculados a partir del NDVI y la precipitación anual de la parcela."
-    )
-
     calc_c = CalculadorCarbono()
     precip_anual = estimar_precipitacion_anual(df_precip)
     res_c = calc_c.calcular_carbono_hectarea(ndvi_val, precip_anual)
@@ -2217,7 +1696,6 @@ with tab_carbono:
     )
     st.dataframe(df_pools, use_container_width=True)
 
-    # Gráfico de barras
     fig_c, ax_c = plt.subplots(figsize=(8, 3))
     bars = ax_c.barh(df_pools['Pool de carbono'], df_pools['t C/ha'],
                      color=['#2ecc71','#27ae60','#f39c12','#e67e22','#8e44ad'])
@@ -2229,7 +1707,6 @@ with tab_carbono:
     plt.tight_layout()
     st.pyplot(fig_c)
 
-    st.markdown("---")
     st.info(
         f"💡 Precipitación anual estimada: **{precip_anual:.0f} mm/año** · "
         f"Precio de referencia: **15 USD/t CO₂e** (mercado voluntario)."
@@ -2249,3 +1726,5 @@ with tab_carbono:
         file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv",
         mime="text/csv",
     )
+
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos simulados de estación meteorológica · Sentinel-2 · ERA5 · CHIRPS · GFS")
