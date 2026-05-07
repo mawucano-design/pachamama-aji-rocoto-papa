@@ -92,6 +92,10 @@ except ImportError:
     xr = None
     XARRAY_OK = False
 
+# DEM vía API REST — siempre disponible porque requests está importado
+# Definimos la variable ANTES de cualquier uso
+OPENTOPOGRAPHY_AVAILABLE = True
+
 try:
     from PIL import Image as PilImage
     PILLOW_OK = True
@@ -992,7 +996,7 @@ pronostico_gfs = obtener_pronostico_gfs_simple(_lat, _lon, dias=7)
 datos_estacion = obtener_datos_estacion_simulada()
 
 # ============================================================
-# PESTAÑAS — 9 en total (Agregamos Estación Meteorológica)
+# PESTAÑAS — 10 en total
 # ============================================================
 (tab_dashboard, tab_mapas, tab_monitoreo,
  tab_alerta, tab_estacion, tab_export, tab_dem,
@@ -1197,7 +1201,8 @@ with tab_mapas:
             f'<table style="font-size:13px;width:100%;">'
             f'<tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr>'
             f'<tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr>'
-            f'</td></table>'
+            f'<tr><td>Puntos críticos</b></td><td><b>{num_criticos}</b></td></tr>'
+            f'</table>'
             f'<hr style="margin:6px 0;">'
             f'<div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div>'
             f'</div>'
@@ -1378,7 +1383,6 @@ with tab_estacion:
             mime="text/csv",
         )
 
-
 # ============================================================
 # EXPORTAR
 # ============================================================
@@ -1434,6 +1438,10 @@ with tab_export:
 # ============================================================
 # DEM (RELIEVE)
 # ============================================================
+# Aseguramos que la variable existe (por si acaso)
+if 'OPENTOPOGRAPHY_AVAILABLE' not in dir():
+    OPENTOPOGRAPHY_AVAILABLE = True
+
 with tab_dem:
     st.header("🗻 Análisis de Relieve — OpenTopography")
     if not OPENTOPOGRAPHY_AVAILABLE:
