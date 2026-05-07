@@ -1235,51 +1235,83 @@ with tab_estacion:
     st.session_state['modo_estacion'] = modo
 
     if modo == "Manual":
-        st.subheader("✍️ Ingreso manual de datos")
-        with st.form("form_manual_estacion"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                temp_ext = st.number_input("🌡️ Temperatura exterior (°C)", value=st.session_state['datos_estacion'].get('temp_exterior',22.0), step=0.5)
-                hum_ext = st.number_input("💧 Humedad exterior (%)", value=st.session_state['datos_estacion'].get('humedad_exterior',65.0), step=1.0)
-                rad = st.number_input("☀️ Radiación solar (W/m²)", value=st.session_state['datos_estacion'].get('radiacion_solar',500), step=10)
-            with col2:
-                viento = st.number_input("💨 Velocidad del viento (km/h)", value=st.session_state['datos_estacion'].get('viento',10.0), step=1.0)
-                ph = st.number_input("🧪 pH del suelo", value=st.session_state['datos_estacion'].get('ph_suelo',6.5), step=0.1)
-                mo = st.number_input("🌱 Materia orgánica (%)", value=st.session_state['datos_estacion'].get('materia_organica',2.5), step=0.1)
-            with col3:
-                n = st.number_input("Nitrógeno (mg/kg)", value=st.session_state['datos_estacion'].get('nitrogeno',60), step=5)
-                p = st.number_input("Fósforo (mg/kg)", value=st.session_state['datos_estacion'].get('fosforo',35), step=5)
-                k = st.number_input("Potasio (mg/kg)", value=st.session_state['datos_estacion'].get('potasio',120), step=10)
-            submitted = st.form_submit_button("📥 Cargar datos manuales")
-            if submitted:
-                st.session_state['datos_estacion'] = {
-                    'temp_exterior': temp_ext, 'humedad_exterior': hum_ext,
-                    'radiacion_solar': rad, 'viento': viento,
-                    'ph_suelo': ph, 'materia_organica': mo,
-                    'nitrogeno': n, 'fosforo': p, 'potasio': k,
-                }
-                st.success("✅ Datos manuales cargados correctamente.")
-                st.rerun()
-        # Mostrar datos actuales
-        estacion_data = st.session_state['datos_estacion']
+    st.subheader("✍️ Ingreso manual de datos")
+    with st.form("form_manual_estacion"):
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("🌡️ Temperatura Exterior", f"{estacion_data['temp_exterior']} °C")
-            st.metric("💧 Humedad Exterior", f"{estacion_data['humedad_exterior']} %")
+            # Convertir a float explícitamente y usar step float
+            temp_ext = st.number_input(
+                "🌡️ Temperatura exterior (°C)",
+                value=float(st.session_state['datos_estacion'].get('temp_exterior', 22.0)),
+                step=0.5,
+                format="%.1f"
+            )
+            hum_ext = st.number_input(
+                "💧 Humedad exterior (%)",
+                value=float(st.session_state['datos_estacion'].get('humedad_exterior', 65.0)),
+                step=1.0,
+                format="%.1f"
+            )
+            rad = st.number_input(
+                "☀️ Radiación solar (W/m²)",
+                value=float(st.session_state['datos_estacion'].get('radiacion_solar', 500.0)),
+                step=10.0,
+                format="%.0f"
+            )
         with col2:
-            st.metric("☀️ Radiación Solar", f"{estacion_data['radiacion_solar']} W/m²")
-            st.metric("💨 Velocidad del Viento", f"{estacion_data['viento']} km/h")
+            viento = st.number_input(
+                "💨 Velocidad del viento (km/h)",
+                value=float(st.session_state['datos_estacion'].get('viento', 10.0)),
+                step=1.0,
+                format="%.1f"
+            )
+            ph = st.number_input(
+                "🧪 pH del suelo",
+                value=float(st.session_state['datos_estacion'].get('ph_suelo', 6.5)),
+                step=0.1,
+                format="%.1f"
+            )
+            mo = st.number_input(
+                "🌱 Materia orgánica (%)",
+                value=float(st.session_state['datos_estacion'].get('materia_organica', 2.5)),
+                step=0.1,
+                format="%.1f"
+            )
         with col3:
-            st.metric("🧪 pH del Suelo", f"{estacion_data['ph_suelo']}")
-            st.metric("🌱 Materia Orgánica", f"{estacion_data['materia_organica']} %")
-        st.subheader("🧪 Fertilidad del Suelo")
-        col_n, col_p, col_k = st.columns(3)
-        with col_n:
-            st.metric("Nitrógeno (N)", f"{estacion_data['nitrogeno']} mg/kg")
-        with col_p:
-            st.metric("Fósforo (P)", f"{estacion_data['fosforo']} mg/kg")
-        with col_k:
-            st.metric("Potasio (K)", f"{estacion_data['potasio']} mg/kg")
+            n = st.number_input(
+                "Nitrógeno (mg/kg)",
+                value=float(st.session_state['datos_estacion'].get('nitrogeno', 60.0)),
+                step=5.0,
+                format="%.0f"
+            )
+            p = st.number_input(
+                "Fósforo (mg/kg)",
+                value=float(st.session_state['datos_estacion'].get('fosforo', 35.0)),
+                step=5.0,
+                format="%.0f"
+            )
+            k = st.number_input(
+                "Potasio (mg/kg)",
+                value=float(st.session_state['datos_estacion'].get('potasio', 120.0)),
+                step=10.0,
+                format="%.0f"
+            )
+        submitted = st.form_submit_button("📥 Cargar datos manuales")
+        if submitted:
+            st.session_state['datos_estacion'] = {
+                'temp_exterior': temp_ext,
+                'humedad_exterior': hum_ext,
+                'radiacion_solar': rad,
+                'viento': viento,
+                'ph_suelo': ph,
+                'materia_organica': mo,
+                'nitrogeno': n,
+                'fosforo': p,
+                'potasio': k,
+            }
+            st.success("✅ Datos manuales cargados correctamente.")
+            st.rerun()
+   
 
     elif modo == "Automática (simulada)":
         st.subheader("🔄 Datos simulados (estación virtual)")
