@@ -108,7 +108,7 @@ except ImportError:
     PLOTLY_OK = False
 
 # ============================================================
-# IMPORTS — TEXTO A VOZ
+# IMPORTS — TEXTO A VOZ (SOLO ESPAÑOL)
 # ============================================================
 try:
     from gtts import gTTS
@@ -992,7 +992,7 @@ if 'datos_estacion' not in st.session_state:
     st.session_state['modo_estacion'] = "Automática (simulada)"
 
 # ============================================================
-# PESTAÑAS — 11 en total (agregamos Gobernanza)
+# PESTAÑAS — 11 total (agregamos Gobernanza)
 # ============================================================
 (tab_dashboard, tab_mapas, tab_monitoreo,
  tab_alerta, tab_estacion, tab_export, tab_dem,
@@ -1011,7 +1011,7 @@ if 'datos_estacion' not in st.session_state:
 ])
 
 # ============================================================
-# DASHBOARD GENERAL (sin cambios)
+# DASHBOARD GENERAL
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
@@ -1156,7 +1156,7 @@ with tab_mapas:
         if tile_url:
             folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2', name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
-        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
+        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</b></td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
         folium.GeoJson(gdf.__geo_interface__, name='Parcela',
                        style_function=lambda x: {'color':'#2ca02c','weight':3,'dashArray':'6','fillColor':'#2ca02c','fillOpacity':0.15},
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
@@ -1201,7 +1201,7 @@ with tab_monitoreo:
         st.pyplot(fig)
 
 # ============================================================
-# ALERTAS IA (sin cambios, pero guardamos el texto en session_state)
+# ALERTAS IA (guardamos el texto en session_state)
 # ============================================================
 with tab_alerta:
     st.header("⚠️ Alertas IA con Datos de Invernadero")
@@ -1221,7 +1221,7 @@ with tab_alerta:
                 pronostico_gfs=pronostico_gfs,
                 datos_estacion=st.session_state['datos_estacion'],
             )
-            st.session_state['ultima_alerta_texto'] = alerta   # Guardamos para usar en audio
+            st.session_state['ultima_alerta_texto'] = alerta
         st.markdown("### 🔔 Alerta Agronómica Integrada")
         st.markdown(alerta)
         st.markdown("---")
@@ -1611,7 +1611,7 @@ with tab_npk:
             st.info("🔘 Haz clic en 'Calcular fertilidad por bloque' para iniciar el análisis.")
 
 # ============================================================
-# AGROECOLOGÍA — 10 PRINCIPIOS (sin cambios pero guardamos)
+# AGROECOLOGÍA — 10 PRINCIPIOS (guardamos textos)
 # ============================================================
 with tab_agro:
     st.header("🌱 Agroecología — 10 Principios")
@@ -1671,11 +1671,11 @@ with tab_carbono:
     st.download_button("⬇️ Exportar reporte de carbono CSV", data=pd.DataFrame([{'cultivo': cultivo, 'area_ha': area_ha, 'ndvi': ndvi_val, 'precip_anual_mm': precip_anual, **res_c['desglose'], 'carbono_total_ton_ha': res_c['carbono_total_ton_ha'], 'co2e_ton_ha': res_c['co2_equivalente_ton_ha'], 'co2e_total_parcela': co2_total, 'creditos_kton': creditos, 'valor_usd': precio_usd}]).to_csv(index=False), file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv", mime="text/csv")
 
 # ============================================================
-# NUEVA PESTAÑA: GOBERNANZA (Resumen + Audio en Español y Guaraní)
+# NUEVA PESTAÑA: GOBERNANZA (Resumen + Audio en Español + Texto Guaraní)
 # ============================================================
 with tab_gobernanza:
     st.header("🎙️ Gobernanza – Resumen ejecutivo con audio inclusivo")
-    st.markdown("Este tab reúne los análisis más importantes de todas las secciones y te permite generar un **audio explicativo** en **español** o **guaraní** para compartir con productores que no saben leer.")
+    st.markdown("Este tab reúne los análisis más importantes de todas las secciones y te permite generar un **audio explicativo en español** para productores que no saben leer. También puedes descargar el resumen en **guaraní** como archivo de texto.")
 
     # ------------------------------------------------------------------
     # 1. Resumen visual (métricas clave)
@@ -1726,16 +1726,12 @@ with tab_gobernanza:
         st.info("El mapa interactivo completo está disponible en la pestaña 'Mapa de Riesgo'.")
 
     # ------------------------------------------------------------------
-    # 3. Generación de audio narrativo (bilingüe)
+    # 3. Generación de audio narrativo en español
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🔊 Escuchar resumen completo (accesibilidad)")
+    st.subheader("🔊 Escuchar resumen completo en español (accesibilidad)")
 
-    # Selección de idioma
-    idioma_audio = st.radio("Idioma del audio:", ["Español (es)", "Guaraní (gn)"], horizontal=True)
-    lang_code = "es" if idioma_audio == "Español (es)" else "gn"
-
-    # Función para construir el texto narrativo según idioma
+    # Función para construir el texto narrativo en español
     def generar_texto_resumen_es():
         # Obtener valores guardados o por defecto
         bloques_info = ""
@@ -1782,46 +1778,67 @@ with tab_gobernanza:
         """
         return texto
 
-    def generar_texto_resumen_gn():
-        # Traducción básica al guaraní (aproximada, se puede mejorar)
-        # Por simplicidad usamos el mismo texto en español pero con nota de que es traducción automática.
-        # Para una versión real, se debería traducir profesionalmente.
-        texto_es = generar_texto_resumen_es()
-        texto_gn = f"[Traducción automática al guaraní]\n\n{texto_es}\n\nNota: Esta es una versión preliminar en guaraní. Para una experiencia óptima, recomendamos consultar con un traductor nativo."
-        return texto_gn
-
-    if st.button("🎧 Generar y descargar audio (MP3)", type="primary"):
+    if st.button("🎧 Generar y descargar audio en español (MP3)", type="primary"):
         if not GTTS_OK:
             st.error("❌ La librería gTTS no está instalada. Por favor, añade 'gTTS' a requirements.txt y reinicia.")
         else:
-            with st.spinner(f"Generando audio narrativo en {idioma_audio} (puede tomar unos segundos)..."):
-                if lang_code == "es":
-                    texto_audio = generar_texto_resumen_es()
-                else:
-                    texto_audio = generar_texto_resumen_gn()
-                # Crear el objeto gTTS en el idioma seleccionado
-                tts = gTTS(text=texto_audio, lang=lang_code, slow=False)
-                # Guardar en un buffer de bytes
+            with st.spinner("Generando audio narrativo en español (puede tomar unos segundos)..."):
+                texto_audio = generar_texto_resumen_es()
+                tts = gTTS(text=texto_audio, lang='es', slow=False)
                 audio_bytes = BytesIO()
                 tts.write_to_fp(audio_bytes)
                 audio_bytes.seek(0)
-                # Ofrecer descarga y reproducción
                 st.audio(audio_bytes, format='audio/mp3', start_time=0)
                 st.download_button(
                     label="📥 Descargar audio (MP3)",
                     data=audio_bytes,
-                    file_name=f"resumen_gobernanza_{cultivo}_{lang_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
+                    file_name=f"resumen_gobernanza_{cultivo}_es_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
                     mime="audio/mpeg"
                 )
                 st.success("✅ Audio generado. Puedes escucharlo arriba o descargarlo.")
                 st.session_state['ultimo_texto_audio'] = texto_audio
 
-    with st.expander("📄 Ver texto completo del audio"):
+    # ------------------------------------------------------------------
+    # 4. Descarga del resumen en guaraní (texto)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("📄 Descargar resumen en guaraní (texto)")
+    st.markdown("Actualmente la síntesis de voz en guaraní no está disponible en gTTS. Puedes descargar el texto traducido automáticamente al guaraní para leerlo o usar otro servicio de texto a voz.")
+
+    def generar_texto_resumen_gn():
+        texto_es = generar_texto_resumen_es()
+        # Traducción muy básica de algunos términos (solo para mostrar)
+        traducciones = {
+            "resumen ejecutivo": "tembi'ukuaa",
+            "monitoreo": "ñangareko",
+            "parcela": "yvyra",
+            "hectáreas": "hectárea",
+            "NDVI": "NDVI",
+            "temperatura": "tembiasakue",
+            "humedad": "ky'a",
+            "precipitación": "ama",
+            "riesgo": "verea",
+            "recomendaciones": "ñe'ẽme'ẽ",
+        }
+        texto_gn = texto_es
+        for es, gn in traducciones.items():
+            texto_gn = texto_gn.replace(es, gn)
+        texto_gn = f"[Traducción automática preliminar al guaraní]\n\n{texto_gn}\n\nNota: Esta traducción es automática y puede contener errores. Se recomienda revisión por un hablante nativo."
+        return texto_gn
+
+    if st.button("📄 Descargar resumen en guaraní (texto)"):
+        texto_gn = generar_texto_resumen_gn()
+        st.download_button(
+            label="⬇️ Descargar texto en guaraní (TXT)",
+            data=texto_gn,
+            file_name=f"resumen_gobernanza_{cultivo}_gn.txt",
+            mime="text/plain"
+        )
+        st.success("Texto en guaraní listo para descargar.")
+
+    with st.expander("📄 Ver texto completo del audio (español)"):
         if st.button("Mostrar texto del resumen en español"):
             texto_mostrar = generar_texto_resumen_es()
             st.text_area("Texto narrativo (español)", texto_mostrar, height=400)
-        if st.button("Mostrar texto del resumen en guaraní (aproximado)"):
-            texto_mostrar = generar_texto_resumen_gn()
-            st.text_area("Texto narrativo (guaraní)", texto_mostrar, height=400)
 
-st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Audio inclusivo en español y guaraní")
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Audio inclusivo en español + texto en guaraní")
