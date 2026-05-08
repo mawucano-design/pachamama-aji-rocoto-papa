@@ -108,13 +108,13 @@ except ImportError:
     PLOTLY_OK = False
 
 # ============================================================
-# IMPORTS — TEXTO A VOZ (SOLO ESPAÑOL)
+# IMPORTS — EDGE TTS (GRATUITO)
 # ============================================================
 try:
-    from gtts import gTTS
-    GTTS_OK = True
+    import edge_tts
+    EDGE_TTS_OK = True
 except ImportError:
-    GTTS_OK = False
+    EDGE_TTS_OK = False
 
 # ============================================================
 # SECRETS / ENV
@@ -1011,7 +1011,7 @@ if 'datos_estacion' not in st.session_state:
 ])
 
 # ============================================================
-# DASHBOARD GENERAL
+# DASHBOARD GENERAL (sin cambios)
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
@@ -1156,7 +1156,7 @@ with tab_mapas:
         if tile_url:
             folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2', name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
-        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</b></td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
+        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td><b>{indice}</b></td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td><b>Área</b></tr><td><b>{area_ha:.2f} ha</b></td></tr><tr><td><b>Puntos críticos</b><tr><td><b>{num_criticos}</b></td><tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
         folium.GeoJson(gdf.__geo_interface__, name='Parcela',
                        style_function=lambda x: {'color':'#2ca02c','weight':3,'dashArray':'6','fillColor':'#2ca02c','fillOpacity':0.15},
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
@@ -1671,14 +1671,14 @@ with tab_carbono:
     st.download_button("⬇️ Exportar reporte de carbono CSV", data=pd.DataFrame([{'cultivo': cultivo, 'area_ha': area_ha, 'ndvi': ndvi_val, 'precip_anual_mm': precip_anual, **res_c['desglose'], 'carbono_total_ton_ha': res_c['carbono_total_ton_ha'], 'co2e_ton_ha': res_c['co2_equivalente_ton_ha'], 'co2e_total_parcela': co2_total, 'creditos_kton': creditos, 'valor_usd': precio_usd}]).to_csv(index=False), file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv", mime="text/csv")
 
 # ============================================================
-# NUEVA PESTAÑA: GOBERNANZA (Resumen + Audio en Español + Texto Guaraní)
+# NUEVA PESTAÑA: GOBERNANZA (Resumen + Podcast con Edge-TTS)
 # ============================================================
 with tab_gobernanza:
-    st.header("🎙️ Gobernanza – Resumen ejecutivo con audio inclusivo")
-    st.markdown("Este tab reúne los análisis más importantes de todas las secciones y te permite generar un **audio explicativo en español** para productores que no saben leer. También puedes descargar el resumen en **guaraní** como archivo de texto.")
+    st.header("🎙️ Gobernanza – Podcast Inteligente con IA (100% Gratis)")
+    st.markdown("Genera un **podcast automático** con recomendaciones de IA. El audio utiliza **Edge‑TTS** (voces de Microsoft, alta calidad y sin costo).")
 
     # ------------------------------------------------------------------
-    # 1. Resumen visual (métricas clave)
+    # 1. Resumen visual (métricas clave y riesgos)
     # ------------------------------------------------------------------
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("🌱 NDVI actual", f"{ndvi_val:.2f}")
@@ -1689,7 +1689,6 @@ with tab_gobernanza:
     st.markdown("---")
     st.subheader("📌 Indicadores de riesgo y producción")
 
-    # Determinar riesgo
     riesgo_ndvi, _ = determinar_riesgo("NDVI", ndvi_val, cultivo, UMBRALES[cultivo])
     riesgo_temp = "BAJO" if umbral['temp_min'] <= temp_val <= umbral['temp_max'] else "ALTO"
     riesgo_hum = "BAJO" if umbral['humedad_min'] <= humedad_val <= umbral['humedad_max'] else "ALTO"
@@ -1699,146 +1698,156 @@ with tab_gobernanza:
     c2.info(f"**Riesgo temperatura:** {riesgo_temp}")
     c3.info(f"**Riesgo humedad:** {riesgo_hum}")
 
-    # Mostrar pronóstico resumido
     st.markdown(f"**Pronóstico semanal:** {pronostico_gfs['alerta_esta_semana']}")
 
     # ------------------------------------------------------------------
-    # 2. Gráficos relevantes
-    # ------------------------------------------------------------------
-    st.subheader("📊 Evolución histórica (últimos 90 días)")
-    if not df_ndvi.empty and not df_temp.empty:
-        fig_res, ax_res = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
-        ax_res[0].plot(df_ndvi['date'], df_ndvi['ndvi'], 'g-', label='NDVI')
-        ax_res[0].axhline(umbral['NDVI_min'], color='r', linestyle='--', label='Umbral')
-        ax_res[0].set_ylabel('NDVI')
-        ax_res[0].legend()
-        ax_res[1].plot(df_temp['date'], df_temp['temp'], 'r-', label='Temperatura')
-        ax_res[1].axhline(umbral['temp_min'], color='b', linestyle='--')
-        ax_res[1].axhline(umbral['temp_max'], color='orange', linestyle='--')
-        ax_res[1].set_ylabel('Temperatura (°C)')
-        ax_res[1].legend()
-        st.pyplot(fig_res)
-    else:
-        st.warning("Datos históricos no disponibles para gráficos.")
-
-    # Mostrar mapa de riesgo mini (opcional)
-    if FOLIUM_OK and st.checkbox("🗺️ Mostrar mapa de riesgo resumido (pestaña Mapa de Riesgo)", value=False):
-        st.info("El mapa interactivo completo está disponible en la pestaña 'Mapa de Riesgo'.")
-
-    # ------------------------------------------------------------------
-    # 3. Generación de audio narrativo en español
+    # 2. Generación de podcast con Edge-TTS (gratis)
     # ------------------------------------------------------------------
     st.markdown("---")
-    st.subheader("🔊 Escuchar resumen completo en español (accesibilidad)")
+    st.subheader("🎙️ Generar Podcast Inteligente")
 
-    # Función para construir el texto narrativo en español
-    def generar_texto_resumen_es():
-        # Obtener valores guardados o por defecto
-        bloques_info = ""
-        if st.session_state.get('bloques_calculados', False) and st.session_state.get('gdf_bloques') is not None:
-            ndvi_prom_bloques = st.session_state['gdf_bloques']['ndvi'].mean()
-            bloques_info = f"Se dividió la parcela en {len(st.session_state['gdf_bloques'])} bloques. El NDVI promedio por bloque es {ndvi_prom_bloques:.3f}. "
+    # Selección de voz en español (varias opciones)
+    voz_espanol = st.selectbox(
+        "Selecciona la voz para el podcast en español:",
+        [
+            "es-AR-ElenaNeural (argentina, muy natural)",
+            "es-MX-DaliaNeural (mexicana)",
+            "es-CO-SalomeNeural (colombiana)",
+            "es-US-AlonsoNeural (latino neutro)",
+            "es-ES-AlvaroNeural (española)"
+        ],
+        index=3  # latino neutro por defecto
+    )
+    codigo_voz = voz_espanol.split(" ")[0]
+
+    if st.button("🚀 Generar Podcast", type="primary"):
+        if not GROQ_API_KEY or not GROQ_AVAILABLE:
+            st.error("❌ API Key de Groq no configurada. El podcast no puede generarse.")
+        elif not EDGE_TTS_OK:
+            st.error("❌ La librería 'edge-tts' no está instalada. Ejecuta: pip install edge-tts")
         else:
-            bloques_info = "Aún no se ha calculado la fertilidad por bloques en la pestaña NPK. "
+            with st.spinner("IA trabajando: Creando guion y generando audio (Edge-TTS gratuito)..."):
+                try:
+                    # 1. Generar guion con Groq
+                    prompt_podcast = f"""
+                    Eres un agroecólogo y narrador de podcasts. Convierte el siguiente resumen técnico en un guion para un podcast dinámico y accesible en español.
 
-        texto_ia = st.session_state.get('ultima_alerta_texto', 'No se generó alerta IA. Usa la pestaña Alertas IA para obtener recomendaciones.')
-        texto_agro = st.session_state.get('ultimo_texto_agro', '')
-        if texto_agro:
-            texto_agro = " Recomendaciones agroecológicas: " + texto_agro[:300] + "..."
-        else:
-            texto_agro = " No se generaron recomendaciones agroecológicas."
+                    El podcast debe:
+                    - Ser presentado por un solo narrador (voz amable y clara).
+                    - Comenzar con un saludo y presentación.
+                    - Explicar los datos clave de forma sencilla para un agricultor.
+                    - Terminar con 3 recomendaciones prácticas y concretas.
+                    - Duración aproximada: 90 segundos de lectura.
 
-        texto = f"""
-        Resumen ejecutivo del monitoreo de {cultivo} en una parcela de {area_ha:.2f} hectáreas.
-        Fecha del análisis: {datetime.now().strftime('%d de %B de %Y')}.
+                    **Datos del cultivo:**
+                    Cultivo: {cultivo} ({area_ha:.2f} hectáreas)
+                    NDVI (salud del cultivo): {ndvi_val:.2f} (Óptimo > {umbral['NDVI_min']:.2f})
+                    Temperatura actual: {temp_val:.1f}°C (Rango ideal {umbral['temp_min']}°C - {umbral['temp_max']}°C)
+                    Humedad del suelo: {humedad_val:.2f} (Rango ideal {umbral['humedad_min']:.2f} - {umbral['humedad_max']:.2f})
+                    Riesgos: NDVI {riesgo_ndvi}, Temperatura {riesgo_temp}, Humedad {riesgo_hum}.
+                    Pronóstico semanal: {pronostico_gfs['alerta_esta_semana']}.
 
-        Indicadores principales:
-        El NDVI, que mide la salud del cultivo, es {ndvi_val:.2f}. Un valor óptimo debería ser mayor a {umbral['NDVI_min']:.2f}.
-        La temperatura actual es de {temp_val:.1f} grados Celsius. El rango ideal es entre {umbral['temp_min']} y {umbral['temp_max']} grados.
-        La humedad del suelo es de {humedad_val:.2f}. El rango recomendado es {umbral['humedad_min']:.2f} a {umbral['humedad_max']:.2f}.
-        La precipitación reciente alcanza {precip_actual:.1f} milímetros.
+                    Recomendaciones de IA para el cultivo:
+                    {st.session_state.get('ultima_alerta_texto', 'Mantener riego controlado y monitorear temperatura.')}
+                    """
 
-        Riesgos detectados:
-        - Para NDVI, el riesgo es {riesgo_ndvi}.
-        - Para temperatura, el riesgo es {riesgo_temp}.
-        - Para humedad, el riesgo es {riesgo_hum}.
+                    client_groq = Groq(api_key=GROQ_API_KEY)
+                    response = client_groq.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[{"role": "user", "content": prompt_podcast}],
+                        max_tokens=600,
+                        temperature=0.6,
+                    )
+                    podcast_script = response.choices[0].message.content
 
-        Pronóstico para la próxima semana: {pronostico_gfs['alerta_esta_semana']}. Las temperaturas máximas alcanzarán hasta {max(pronostico_gfs['temp_max_proyectada']):.1f} grados y se espera una precipitación acumulada de {pronostico_gfs['precip_acum']:.0f} milímetros.
+                    # 2. Generar audio con Edge-TTS (gratis)
+                    import edge_tts
+                    import asyncio
 
-        Recomendaciones generadas por inteligencia artificial:
-        {texto_ia}
+                    async def generar_audio_edge(texto, voz):
+                        communicate = edge_tts.Communicate(texto, voz)
+                        audio_bytes = io.BytesIO()
+                        async for chunk in communicate.stream():
+                            if chunk["type"] == "audio":
+                                audio_bytes.write(chunk["data"])
+                        audio_bytes.seek(0)
+                        return audio_bytes
 
-        {bloques_info}
+                    # Ejecutar la función asíncrona
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    audio_data = loop.run_until_complete(generar_audio_edge(podcast_script, codigo_voz))
+                    loop.close()
 
-        En cuanto al carbono capturado, se estima un total de {st.session_state.get('res_carbono', {}).get('carbono_total_ton_ha', 0):.1f} toneladas de carbono por hectárea, equivalente a {st.session_state.get('res_carbono', {}).get('co2_equivalente_ton_ha', 0):.1f} toneladas de CO₂ equivalente por hectárea. Para toda la parcela, esto representa aproximadamente {st.session_state.get('creditos', 0):.3f} kilotoneladas de CO₂, con un valor estimado de {st.session_state.get('precio_usd', 0):.2f} dólares en el mercado voluntario de carbono.
+                    st.success("✅ Podcast generado exitosamente (Edge-TTS, 100% gratuito)")
+                    st.audio(audio_data, format='audio/mp3')
+                    st.download_button(
+                        label="📥 Descargar Podcast (MP3)",
+                        data=audio_data,
+                        file_name=f"podcast_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
+                        mime="audio/mpeg"
+                    )
 
-        {texto_agro}
+                    # Guardar guion para mostrarlo después
+                    st.session_state['ultimo_guion_podcast'] = podcast_script
 
-        Finalmente, se recomienda revisar las pestañas de Agroecología y Estación Meteorológica para acciones específicas.
-        """
-        return texto
+                except Exception as e:
+                    st.error(f"❌ Error: {str(e)}")
+                    st.info("Si el error persiste, verifica tu conexión a internet. Edge-TTS requiere conexión activa.")
 
-    if st.button("🎧 Generar y descargar audio en español (MP3)", type="primary"):
-        if not GTTS_OK:
-            st.error("❌ La librería gTTS no está instalada. Por favor, añade 'gTTS' a requirements.txt y reinicia.")
-        else:
-            with st.spinner("Generando audio narrativo en español (puede tomar unos segundos)..."):
-                texto_audio = generar_texto_resumen_es()
-                tts = gTTS(text=texto_audio, lang='es', slow=False)
-                audio_bytes = BytesIO()
-                tts.write_to_fp(audio_bytes)
-                audio_bytes.seek(0)
-                st.audio(audio_bytes, format='audio/mp3', start_time=0)
-                st.download_button(
-                    label="📥 Descargar audio (MP3)",
-                    data=audio_bytes,
-                    file_name=f"resumen_gobernanza_{cultivo}_es_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
-                    mime="audio/mpeg"
-                )
-                st.success("✅ Audio generado. Puedes escucharlo arriba o descargarlo.")
-                st.session_state['ultimo_texto_audio'] = texto_audio
+    # Mostrar guion generado
+    if st.session_state.get('ultimo_guion_podcast'):
+        with st.expander("📄 Ver el guion del podcast generado"):
+            st.markdown(st.session_state['ultimo_guion_podcast'])
 
     # ------------------------------------------------------------------
-    # 4. Descarga del resumen en guaraní (texto)
+    # 3. Opción para descargar resumen en guaraní (texto)
     # ------------------------------------------------------------------
     st.markdown("---")
     st.subheader("📄 Descargar resumen en guaraní (texto)")
-    st.markdown("Actualmente la síntesis de voz en guaraní no está disponible en gTTS. Puedes descargar el texto traducido automáticamente al guaraní para leerlo o usar otro servicio de texto a voz.")
+    st.markdown("Actualmente la síntesis de voz en guaraní no está disponible de forma gratuita con alta calidad. Puedes descargar el texto traducido automáticamente al guaraní para leerlo o usar otro servicio de texto a voz.")
 
     def generar_texto_resumen_gn():
-        texto_es = generar_texto_resumen_es()
-        # Traducción muy básica de algunos términos (solo para mostrar)
+        texto_es = f"""
+Resumen ejecutivo del monitoreo de {cultivo} en una parcela de {area_ha:.2f} hectáreas.
+Fecha: {datetime.now().strftime('%d/%m/%Y')}.
+
+Indicadores:
+- NDVI: {ndvi_val:.2f} (óptimo > {umbral['NDVI_min']:.2f})
+- Temperatura: {temp_val:.1f}°C (rango ideal {umbral['temp_min']}-{umbral['temp_max']}°C)
+- Humedad suelo: {humedad_val:.2f} (rango ideal {umbral['humedad_min']:.2f}-{umbral['humedad_max']:.2f})
+- Precipitación: {precip_actual:.1f} mm
+
+Riesgos: NDVI {riesgo_ndvi}, Temp {riesgo_temp}, Humedad {riesgo_hum}
+Pronóstico: {pronostico_gfs['alerta_esta_semana']}
+
+Recomendaciones IA: {st.session_state.get('ultima_alerta_texto', 'Sin recomendaciones aún.')}
+        """
+        # Traducción muy básica
         traducciones = {
-            "resumen ejecutivo": "tembi'ukuaa",
-            "monitoreo": "ñangareko",
-            "parcela": "yvyra",
+            "Resumen ejecutivo del monitoreo de": "Tembi'ukuaa ñangareko",
+            "en una parcela de": "yvyra peteĩ",
             "hectáreas": "hectárea",
-            "NDVI": "NDVI",
-            "temperatura": "tembiasakue",
-            "humedad": "ky'a",
-            "precipitación": "ama",
-            "riesgo": "verea",
-            "recomendaciones": "ñe'ẽme'ẽ",
+            "Indicadores": "Indicadores",
+            "óptimo": "porã",
+            "rango ideal": "tembiapo porã",
+            "Riesgos": "Verea",
+            "Pronóstico": "Ama ñe'ẽ",
+            "Recomendaciones": "Ñe'ẽme'ẽ",
         }
         texto_gn = texto_es
         for es, gn in traducciones.items():
             texto_gn = texto_gn.replace(es, gn)
-        texto_gn = f"[Traducción automática preliminar al guaraní]\n\n{texto_gn}\n\nNota: Esta traducción es automática y puede contener errores. Se recomienda revisión por un hablante nativo."
-        return texto_gn
+        return f"[Traducción automática al guaraní - revisar con hablante nativo]\n\n{texto_gn}"
 
     if st.button("📄 Descargar resumen en guaraní (texto)"):
         texto_gn = generar_texto_resumen_gn()
         st.download_button(
             label="⬇️ Descargar texto en guaraní (TXT)",
             data=texto_gn,
-            file_name=f"resumen_gobernanza_{cultivo}_gn.txt",
+            file_name=f"resumen_guarani_{cultivo}.txt",
             mime="text/plain"
         )
         st.success("Texto en guaraní listo para descargar.")
 
-    with st.expander("📄 Ver texto completo del audio (español)"):
-        if st.button("Mostrar texto del resumen en español"):
-            texto_mostrar = generar_texto_resumen_es()
-            st.text_area("Texto narrativo (español)", texto_mostrar, height=400)
-
-st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Audio inclusivo en español + texto en guaraní")
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Podcast gratuito con Edge-TTS")
