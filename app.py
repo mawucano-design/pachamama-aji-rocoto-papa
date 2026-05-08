@@ -108,13 +108,13 @@ except ImportError:
     PLOTLY_OK = False
 
 # ============================================================
-# IMPORTS — EDGE TTS (GRATUITO)
+# IMPORTS — TEXTO A VOZ (gTTS)
 # ============================================================
 try:
-    import edge_tts
-    EDGE_TTS_OK = True
+    from gtts import gTTS
+    GTTS_OK = True
 except ImportError:
-    EDGE_TTS_OK = False
+    GTTS_OK = False
 
 # ============================================================
 # SECRETS / ENV
@@ -1011,7 +1011,7 @@ if 'datos_estacion' not in st.session_state:
 ])
 
 # ============================================================
-# DASHBOARD GENERAL (sin cambios)
+# DASHBOARD GENERAL
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
@@ -1077,7 +1077,7 @@ with tab_dashboard:
         plt.tight_layout(); st.pyplot(fig)
 
 # ============================================================
-# MAPA DE RIESGO (sin cambios)
+# MAPA DE RIESGO
 # ============================================================
 with tab_mapas:
     st.header("🗺️ Mapa de Riesgo Climático Interactivo")
@@ -1156,7 +1156,7 @@ with tab_mapas:
         if tile_url:
             folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2', name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
-        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td><b>{indice}</b></td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td><b>Área</b></tr><td><b>{area_ha:.2f} ha</b></td></tr><tr><td><b>Puntos críticos</b><tr><td><b>{num_criticos}</b></td><tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
+        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td><b>{indice}</b></td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td><b>Área</b></td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td><b>Puntos críticos</b></td><td><b>{num_criticos}</b></td></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
         folium.GeoJson(gdf.__geo_interface__, name='Parcela',
                        style_function=lambda x: {'color':'#2ca02c','weight':3,'dashArray':'6','fillColor':'#2ca02c','fillOpacity':0.15},
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
@@ -1177,7 +1177,7 @@ with tab_mapas:
             st.info("🗺️ Mapa base activo. Autenticá GEE en el panel lateral para agregar capas satelitales Sentinel-2.")
 
 # ============================================================
-# MONITOREO FENOLÓGICO (sin cambios)
+# MONITOREO FENOLÓGICO
 # ============================================================
 with tab_monitoreo:
     st.header("📈 Monitoreo Detallado")
@@ -1231,7 +1231,7 @@ with tab_alerta:
         st.download_button("📥 Descargar alerta completa", data=texto_descarga, file_name=f"alerta_{cultivo}_{fecha_str}.txt")
 
 # ============================================================
-# ESTACIÓN METEOROLÓGICA (sin cambios)
+# ESTACIÓN METEOROLÓGICA
 # ============================================================
 with tab_estacion:
     st.header("🌦️ Datos de Estación Meteorológica")
@@ -1424,7 +1424,7 @@ with tab_estacion:
         st.download_button("⬇️ Descargar CSV", data=df_estacion.to_csv(index=False), file_name=f"estacion_meteorologica_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", mime="text/csv")
 
 # ============================================================
-# EXPORTAR (sin cambios)
+# EXPORTAR
 # ============================================================
 with tab_export:
     st.subheader("💾 Exportar Datos")
@@ -1461,7 +1461,7 @@ with tab_export:
             st.success(f"✅ {len(df_points)} puntos generados dentro de la parcela.")
 
 # ============================================================
-# DEM (RELIEVE) (sin cambios)
+# DEM (RELIEVE)
 # ============================================================
 with tab_dem:
     st.header("🗻 Análisis de Relieve — OpenTopography")
@@ -1671,11 +1671,11 @@ with tab_carbono:
     st.download_button("⬇️ Exportar reporte de carbono CSV", data=pd.DataFrame([{'cultivo': cultivo, 'area_ha': area_ha, 'ndvi': ndvi_val, 'precip_anual_mm': precip_anual, **res_c['desglose'], 'carbono_total_ton_ha': res_c['carbono_total_ton_ha'], 'co2e_ton_ha': res_c['co2_equivalente_ton_ha'], 'co2e_total_parcela': co2_total, 'creditos_kton': creditos, 'valor_usd': precio_usd}]).to_csv(index=False), file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv", mime="text/csv")
 
 # ============================================================
-# NUEVA PESTAÑA: GOBERNANZA (Resumen + Podcast con Edge-TTS)
+# NUEVA PESTAÑA: GOBERNANZA (Resumen + Podcast con gTTS, gratis y sin errores)
 # ============================================================
 with tab_gobernanza:
-    st.header("🎙️ Gobernanza – Podcast Inteligente con IA (100% Gratis)")
-    st.markdown("Genera un **podcast automático** con recomendaciones de IA. El audio utiliza **Edge‑TTS** (voces de Microsoft, alta calidad y sin costo).")
+    st.header("🎙️ Gobernanza – Podcast Inteligente (gTTS, 100% gratuito)")
+    st.markdown("Genera un **podcast automático** con recomendaciones de IA. El audio usa **gTTS** (Google Text‑to‑Speech), que es gratuito, no requiere API key y funciona sin errores 403.")
 
     # ------------------------------------------------------------------
     # 1. Resumen visual (métricas clave y riesgos)
@@ -1701,32 +1701,18 @@ with tab_gobernanza:
     st.markdown(f"**Pronóstico semanal:** {pronostico_gfs['alerta_esta_semana']}")
 
     # ------------------------------------------------------------------
-    # 2. Generación de podcast con Edge-TTS (gratis)
+    # 2. Generación de podcast con gTTS (gratis, estable)
     # ------------------------------------------------------------------
     st.markdown("---")
     st.subheader("🎙️ Generar Podcast Inteligente")
 
-    # Selección de voz en español (varias opciones)
-    voz_espanol = st.selectbox(
-        "Selecciona la voz para el podcast en español:",
-        [
-            "es-AR-ElenaNeural (argentina, muy natural)",
-            "es-MX-DaliaNeural (mexicana)",
-            "es-CO-SalomeNeural (colombiana)",
-            "es-US-AlonsoNeural (latino neutro)",
-            "es-ES-AlvaroNeural (española)"
-        ],
-        index=3  # latino neutro por defecto
-    )
-    codigo_voz = voz_espanol.split(" ")[0]
-
-    if st.button("🚀 Generar Podcast", type="primary"):
+    if st.button("🚀 Generar Podcast (Español)", type="primary"):
         if not GROQ_API_KEY or not GROQ_AVAILABLE:
             st.error("❌ API Key de Groq no configurada. El podcast no puede generarse.")
-        elif not EDGE_TTS_OK:
-            st.error("❌ La librería 'edge-tts' no está instalada. Ejecuta: pip install edge-tts")
+        elif not GTTS_OK:
+            st.error("❌ La librería 'gTTS' no está instalada. Ejecuta: pip install gTTS")
         else:
-            with st.spinner("IA trabajando: Creando guion y generando audio (Edge-TTS gratuito)..."):
+            with st.spinner("IA trabajando: Creando guion y generando audio con gTTS..."):
                 try:
                     # 1. Generar guion con Groq
                     prompt_podcast = f"""
@@ -1760,40 +1746,25 @@ with tab_gobernanza:
                     )
                     podcast_script = response.choices[0].message.content
 
-                    # 2. Generar audio con Edge-TTS (gratis)
-                    import edge_tts
-                    import asyncio
+                    # 2. Generar audio con gTTS
+                    tts = gTTS(text=podcast_script, lang='es', slow=False)
+                    audio_bytes = BytesIO()
+                    tts.write_to_fp(audio_bytes)
+                    audio_bytes.seek(0)
 
-                    async def generar_audio_edge(texto, voz):
-                        communicate = edge_tts.Communicate(texto, voz)
-                        audio_bytes = io.BytesIO()
-                        async for chunk in communicate.stream():
-                            if chunk["type"] == "audio":
-                                audio_bytes.write(chunk["data"])
-                        audio_bytes.seek(0)
-                        return audio_bytes
-
-                    # Ejecutar la función asíncrona
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    audio_data = loop.run_until_complete(generar_audio_edge(podcast_script, codigo_voz))
-                    loop.close()
-
-                    st.success("✅ Podcast generado exitosamente (Edge-TTS, 100% gratuito)")
-                    st.audio(audio_data, format='audio/mp3')
+                    st.success("✅ Podcast generado exitosamente con gTTS")
+                    st.audio(audio_bytes, format='audio/mp3')
                     st.download_button(
                         label="📥 Descargar Podcast (MP3)",
-                        data=audio_data,
+                        data=audio_bytes,
                         file_name=f"podcast_{cultivo}_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
                         mime="audio/mpeg"
                     )
-
-                    # Guardar guion para mostrarlo después
                     st.session_state['ultimo_guion_podcast'] = podcast_script
 
                 except Exception as e:
                     st.error(f"❌ Error: {str(e)}")
-                    st.info("Si el error persiste, verifica tu conexión a internet. Edge-TTS requiere conexión activa.")
+                    st.info("Asegúrate de tener conexión a internet y que gTTS esté correctamente instalado.")
 
     # Mostrar guion generado
     if st.session_state.get('ultimo_guion_podcast'):
@@ -1801,11 +1772,11 @@ with tab_gobernanza:
             st.markdown(st.session_state['ultimo_guion_podcast'])
 
     # ------------------------------------------------------------------
-    # 3. Opción para descargar resumen en guaraní (texto)
+    # 3. Descarga del resumen en guaraní (texto)
     # ------------------------------------------------------------------
     st.markdown("---")
     st.subheader("📄 Descargar resumen en guaraní (texto)")
-    st.markdown("Actualmente la síntesis de voz en guaraní no está disponible de forma gratuita con alta calidad. Puedes descargar el texto traducido automáticamente al guaraní para leerlo o usar otro servicio de texto a voz.")
+    st.markdown("La síntesis de voz en guaraní no está disponible gratuitamente de forma estable. Aquí puedes descargar el texto traducido automáticamente para leerlo o usar otro servicio.")
 
     def generar_texto_resumen_gn():
         texto_es = f"""
@@ -1823,7 +1794,7 @@ Pronóstico: {pronostico_gfs['alerta_esta_semana']}
 
 Recomendaciones IA: {st.session_state.get('ultima_alerta_texto', 'Sin recomendaciones aún.')}
         """
-        # Traducción muy básica
+        # Traducción simbólica (solo para mostrar)
         traducciones = {
             "Resumen ejecutivo del monitoreo de": "Tembi'ukuaa ñangareko",
             "en una parcela de": "yvyra peteĩ",
@@ -1850,4 +1821,4 @@ Recomendaciones IA: {st.session_state.get('ultima_alerta_texto', 'Sin recomendac
         )
         st.success("Texto en guaraní listo para descargar.")
 
-st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Podcast gratuito con Edge-TTS")
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Podcast gratuito con gTTS")
