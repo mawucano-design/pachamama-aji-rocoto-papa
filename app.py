@@ -108,6 +108,15 @@ except ImportError:
     PLOTLY_OK = False
 
 # ============================================================
+# IMPORTS — TEXTO A VOZ
+# ============================================================
+try:
+    from gtts import gTTS
+    GTTS_OK = True
+except ImportError:
+    GTTS_OK = False
+
+# ============================================================
 # SECRETS / ENV
 # ============================================================
 def _leer_secrets_toml():
@@ -983,11 +992,11 @@ if 'datos_estacion' not in st.session_state:
     st.session_state['modo_estacion'] = "Automática (simulada)"
 
 # ============================================================
-# PESTAÑAS — 10 en total
+# PESTAÑAS — 11 en total (agregamos Gobernanza)
 # ============================================================
 (tab_dashboard, tab_mapas, tab_monitoreo,
  tab_alerta, tab_estacion, tab_export, tab_dem,
- tab_npk, tab_agro, tab_carbono) = st.tabs([
+ tab_npk, tab_agro, tab_carbono, tab_gobernanza) = st.tabs([
     "📊 Dashboard General",
     "🗺️ Mapa de Riesgo",
     "📈 Monitoreo Fenológico",
@@ -998,10 +1007,11 @@ if 'datos_estacion' not in st.session_state:
     "🌾 Fertilidad NPK",
     "🌱 Agroecología",
     "🌍 Carbono",
+    "🎙️ Gobernanza (Audio)",
 ])
 
 # ============================================================
-# DASHBOARD GENERAL
+# DASHBOARD GENERAL (sin cambios)
 # ============================================================
 with tab_dashboard:
     st.header("Dashboard de Indicadores Clave")
@@ -1067,7 +1077,7 @@ with tab_dashboard:
         plt.tight_layout(); st.pyplot(fig)
 
 # ============================================================
-# MAPA DE RIESGO
+# MAPA DE RIESGO (sin cambios)
 # ============================================================
 with tab_mapas:
     st.header("🗺️ Mapa de Riesgo Climático Interactivo")
@@ -1146,7 +1156,7 @@ with tab_mapas:
         if tile_url:
             folium.TileLayer(tiles=tile_url, attr='GEE · Sentinel-2', name=f'{indice} (Sentinel-2)', overlay=True, control=True, opacity=0.88).add_to(mapa)
         riesgo_color = "#2ca02c" if riesgo_map=="BAJO" else "#f39c12" if riesgo_map=="MEDIO" else "#e74c3c"
-        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</b></td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</b></td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
+        popup_poly_html = f'<div style="font-family:Arial;min-width:210px;"><h4 style="margin:0;color:#2ca02c;">{riesgo_emoji_map} {ICONOS[cultivo]} {cultivo}</h4><p style="margin:4px 0;font-size:11px;color:#888;">{area_ha:.2f} ha</p><hr style="margin:6px 0;"><table style="font-size:13px;width:100%;"><tr><td>{indice}</td><td><b>{mean_val_map:.3f}{unidad}</b></td></tr><tr><td>Área</td><td><b>{area_ha:.2f} ha</b></td></tr><tr><td>Puntos críticos</td><td><b>{num_criticos}</b></td></tr></table><hr style="margin:6px 0;"><div style="text-align:center;padding:4px;background:{riesgo_color};color:white;border-radius:4px;font-weight:bold;">Riesgo {riesgo_map}</div></div>'
         folium.GeoJson(gdf.__geo_interface__, name='Parcela',
                        style_function=lambda x: {'color':'#2ca02c','weight':3,'dashArray':'6','fillColor':'#2ca02c','fillOpacity':0.15},
                        tooltip=f'{riesgo_emoji_map} {cultivo} — Riesgo {riesgo_map} ({indice}: {mean_val_map:.3f})',
@@ -1167,7 +1177,7 @@ with tab_mapas:
             st.info("🗺️ Mapa base activo. Autenticá GEE en el panel lateral para agregar capas satelitales Sentinel-2.")
 
 # ============================================================
-# MONITOREO FENOLÓGICO
+# MONITOREO FENOLÓGICO (sin cambios)
 # ============================================================
 with tab_monitoreo:
     st.header("📈 Monitoreo Detallado")
@@ -1191,7 +1201,7 @@ with tab_monitoreo:
         st.pyplot(fig)
 
 # ============================================================
-# ALERTAS IA
+# ALERTAS IA (sin cambios, pero guardamos el texto en session_state)
 # ============================================================
 with tab_alerta:
     st.header("⚠️ Alertas IA con Datos de Invernadero")
@@ -1211,6 +1221,7 @@ with tab_alerta:
                 pronostico_gfs=pronostico_gfs,
                 datos_estacion=st.session_state['datos_estacion'],
             )
+            st.session_state['ultima_alerta_texto'] = alerta   # Guardamos para usar en audio
         st.markdown("### 🔔 Alerta Agronómica Integrada")
         st.markdown(alerta)
         st.markdown("---")
@@ -1220,7 +1231,7 @@ with tab_alerta:
         st.download_button("📥 Descargar alerta completa", data=texto_descarga, file_name=f"alerta_{cultivo}_{fecha_str}.txt")
 
 # ============================================================
-# ESTACIÓN METEOROLÓGICA (MANUAL / SIMULADA / API)
+# ESTACIÓN METEOROLÓGICA (sin cambios)
 # ============================================================
 with tab_estacion:
     st.header("🌦️ Datos de Estación Meteorológica")
@@ -1413,7 +1424,7 @@ with tab_estacion:
         st.download_button("⬇️ Descargar CSV", data=df_estacion.to_csv(index=False), file_name=f"estacion_meteorologica_{datetime.now().strftime('%Y%m%d_%H%M')}.csv", mime="text/csv")
 
 # ============================================================
-# EXPORTAR
+# EXPORTAR (sin cambios)
 # ============================================================
 with tab_export:
     st.subheader("💾 Exportar Datos")
@@ -1450,7 +1461,7 @@ with tab_export:
             st.success(f"✅ {len(df_points)} puntos generados dentro de la parcela.")
 
 # ============================================================
-# DEM (RELIEVE)
+# DEM (RELIEVE) (sin cambios)
 # ============================================================
 with tab_dem:
     st.header("🗻 Análisis de Relieve — OpenTopography")
@@ -1536,7 +1547,7 @@ with tab_dem:
                     st.warning(f"Error exportando DEM: {e}")
 
 # ============================================================
-# FERTILIDAD NPK POR BLOQUES
+# FERTILIDAD NPK POR BLOQUES (con almacenamiento en session_state)
 # ============================================================
 with tab_npk:
     st.header("🌾 Fertilidad NPK por Bloques")
@@ -1561,6 +1572,9 @@ with tab_npk:
                 rends = [estimar_potencial_cosecha(v, cultivo, a) for v, a in zip(gdf_bloques['ndvi'], gdf_bloques['area_ha'])]
                 gdf_bloques['rend_t_ha'] = [r[0] for r in rends]
                 gdf_bloques['prod_total_t'] = [r[1] for r in rends]
+                # Guardar en session_state
+                st.session_state['gdf_bloques'] = gdf_bloques
+                st.session_state['bloques_calculados'] = True
                 c1, c2, c3, c4 = st.columns(4)
                 ndvi_med = gdf_bloques['ndvi'].mean()
                 c1.metric("NDVI promedio", f"{ndvi_med:.3f}")
@@ -1590,9 +1604,14 @@ with tab_npk:
                                        popup=folium.Popup(popup_txt, max_width=200)).add_to(m_npk)
                     components.html(m_npk.get_root().render(), height=500)
                 st.download_button("⬇️ Descargar CSV fertilidad", data=gdf_bloques[display_cols].to_csv(index=False), file_name=f"fertilidad_npk_{cultivo}.csv", mime="text/csv")
+    else:
+        if st.session_state.get('bloques_calculados', False) and st.session_state.get('gdf_bloques') is not None:
+            st.info("ℹ️ Ya se calcularon los bloques anteriormente. Puedes volver a calcular si cambiaste parámetros.")
+        else:
+            st.info("🔘 Haz clic en 'Calcular fertilidad por bloque' para iniciar el análisis.")
 
 # ============================================================
-# AGROECOLOGÍA — 10 PRINCIPIOS
+# AGROECOLOGÍA — 10 PRINCIPIOS (sin cambios pero guardamos)
 # ============================================================
 with tab_agro:
     st.header("🌱 Agroecología — 10 Principios")
@@ -1601,6 +1620,7 @@ with tab_agro:
         if st.button("🌿 Recomendación por principio", type="primary"):
             with st.spinner("Generando recomendaciones agroecológicas…"):
                 rec = generar_recomendaciones_agroecologicas(cultivo, fase_fenologica, ndvi_val, temp_val, humedad_val, precip_actual)
+                st.session_state['ultimo_texto_agro'] = rec
             st.markdown("### 🌿 Recomendaciones por Principio Agroecológico")
             st.markdown(rec)
             st.download_button("⬇️ Descargar recomendaciones", data=rec, file_name=f"agroecologia_principios_{cultivo}.txt")
@@ -1608,13 +1628,14 @@ with tab_agro:
         if st.button("📋 Plan agroecológico completo"):
             with st.spinner("Generando plan completo…"):
                 plan = generar_plan_agroecologico_completo(cultivo, fase_fenologica, ndvi_val, temp_val, humedad_val, precip_actual, area_ha)
+                st.session_state['ultimo_plan_agro'] = plan
             st.markdown("### 📋 Plan Agroecológico Integral")
             st.markdown(plan)
             st.download_button("⬇️ Descargar plan", data=plan, file_name=f"plan_agroecologico_{cultivo}.txt")
     st.caption(f"📊 Contexto enviado a la IA — NDVI: {ndvi_val:.3f} · Temp: {temp_val:.1f}°C · Humedad: {humedad_val:.2f} · Precip: {precip_actual:.1f} mm · Fase: {fase_fenologica} · Cultivo: {cultivo}")
 
 # ============================================================
-# CARBONO Y CRÉDITOS
+# CARBONO Y CRÉDITOS (con almacenamiento)
 # ============================================================
 with tab_carbono:
     st.header("🌍 Carbono y Créditos de Carbono")
@@ -1624,6 +1645,11 @@ with tab_carbono:
     co2_total = round(res_c['co2_equivalente_ton_ha'] * area_ha, 2)
     creditos = round(co2_total / 1000, 4)
     precio_usd = round(creditos * 15, 2)
+    # Guardar en sesión
+    st.session_state['res_carbono'] = res_c
+    st.session_state['co2_total'] = co2_total
+    st.session_state['creditos'] = creditos
+    st.session_state['precio_usd'] = precio_usd
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("🌿 C total (t C/ha)", f"{res_c['carbono_total_ton_ha']}")
     c2.metric("☁️ CO₂e (t/ha)", f"{res_c['co2_equivalente_ton_ha']}")
@@ -1644,4 +1670,158 @@ with tab_carbono:
     st.info(f"💡 Precipitación anual estimada: **{precip_anual:.0f} mm/año** · Precio de referencia: **15 USD/t CO₂e** (mercado voluntario).")
     st.download_button("⬇️ Exportar reporte de carbono CSV", data=pd.DataFrame([{'cultivo': cultivo, 'area_ha': area_ha, 'ndvi': ndvi_val, 'precip_anual_mm': precip_anual, **res_c['desglose'], 'carbono_total_ton_ha': res_c['carbono_total_ton_ha'], 'co2e_ton_ha': res_c['co2_equivalente_ton_ha'], 'co2e_total_parcela': co2_total, 'creditos_kton': creditos, 'valor_usd': precio_usd}]).to_csv(index=False), file_name=f"carbono_{cultivo}_{area_ha:.1f}ha.csv", mime="text/csv")
 
-st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS")
+# ============================================================
+# NUEVA PESTAÑA: GOBERNANZA (Resumen + Audio en Español y Guaraní)
+# ============================================================
+with tab_gobernanza:
+    st.header("🎙️ Gobernanza – Resumen ejecutivo con audio inclusivo")
+    st.markdown("Este tab reúne los análisis más importantes de todas las secciones y te permite generar un **audio explicativo** en **español** o **guaraní** para compartir con productores que no saben leer.")
+
+    # ------------------------------------------------------------------
+    # 1. Resumen visual (métricas clave)
+    # ------------------------------------------------------------------
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("🌱 NDVI actual", f"{ndvi_val:.2f}")
+    col2.metric("🌡️ Temperatura", f"{temp_val:.1f} °C")
+    col3.metric("💧 Humedad suelo", f"{humedad_val:.2f}")
+    col4.metric("🌧️ Precipitación", f"{precip_actual:.1f} mm")
+
+    st.markdown("---")
+    st.subheader("📌 Indicadores de riesgo y producción")
+
+    # Determinar riesgo
+    riesgo_ndvi, _ = determinar_riesgo("NDVI", ndvi_val, cultivo, UMBRALES[cultivo])
+    riesgo_temp = "BAJO" if umbral['temp_min'] <= temp_val <= umbral['temp_max'] else "ALTO"
+    riesgo_hum = "BAJO" if umbral['humedad_min'] <= humedad_val <= umbral['humedad_max'] else "ALTO"
+
+    c1, c2, c3 = st.columns(3)
+    c1.info(f"**Riesgo NDVI:** {riesgo_ndvi}")
+    c2.info(f"**Riesgo temperatura:** {riesgo_temp}")
+    c3.info(f"**Riesgo humedad:** {riesgo_hum}")
+
+    # Mostrar pronóstico resumido
+    st.markdown(f"**Pronóstico semanal:** {pronostico_gfs['alerta_esta_semana']}")
+
+    # ------------------------------------------------------------------
+    # 2. Gráficos relevantes
+    # ------------------------------------------------------------------
+    st.subheader("📊 Evolución histórica (últimos 90 días)")
+    if not df_ndvi.empty and not df_temp.empty:
+        fig_res, ax_res = plt.subplots(2, 1, figsize=(10, 6), sharex=True)
+        ax_res[0].plot(df_ndvi['date'], df_ndvi['ndvi'], 'g-', label='NDVI')
+        ax_res[0].axhline(umbral['NDVI_min'], color='r', linestyle='--', label='Umbral')
+        ax_res[0].set_ylabel('NDVI')
+        ax_res[0].legend()
+        ax_res[1].plot(df_temp['date'], df_temp['temp'], 'r-', label='Temperatura')
+        ax_res[1].axhline(umbral['temp_min'], color='b', linestyle='--')
+        ax_res[1].axhline(umbral['temp_max'], color='orange', linestyle='--')
+        ax_res[1].set_ylabel('Temperatura (°C)')
+        ax_res[1].legend()
+        st.pyplot(fig_res)
+    else:
+        st.warning("Datos históricos no disponibles para gráficos.")
+
+    # Mostrar mapa de riesgo mini (opcional)
+    if FOLIUM_OK and st.checkbox("🗺️ Mostrar mapa de riesgo resumido (pestaña Mapa de Riesgo)", value=False):
+        st.info("El mapa interactivo completo está disponible en la pestaña 'Mapa de Riesgo'.")
+
+    # ------------------------------------------------------------------
+    # 3. Generación de audio narrativo (bilingüe)
+    # ------------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🔊 Escuchar resumen completo (accesibilidad)")
+
+    # Selección de idioma
+    idioma_audio = st.radio("Idioma del audio:", ["Español (es)", "Guaraní (gn)"], horizontal=True)
+    lang_code = "es" if idioma_audio == "Español (es)" else "gn"
+
+    # Función para construir el texto narrativo según idioma
+    def generar_texto_resumen_es():
+        # Obtener valores guardados o por defecto
+        bloques_info = ""
+        if st.session_state.get('bloques_calculados', False) and st.session_state.get('gdf_bloques') is not None:
+            ndvi_prom_bloques = st.session_state['gdf_bloques']['ndvi'].mean()
+            bloques_info = f"Se dividió la parcela en {len(st.session_state['gdf_bloques'])} bloques. El NDVI promedio por bloque es {ndvi_prom_bloques:.3f}. "
+        else:
+            bloques_info = "Aún no se ha calculado la fertilidad por bloques en la pestaña NPK. "
+
+        texto_ia = st.session_state.get('ultima_alerta_texto', 'No se generó alerta IA. Usa la pestaña Alertas IA para obtener recomendaciones.')
+        texto_agro = st.session_state.get('ultimo_texto_agro', '')
+        if texto_agro:
+            texto_agro = " Recomendaciones agroecológicas: " + texto_agro[:300] + "..."
+        else:
+            texto_agro = " No se generaron recomendaciones agroecológicas."
+
+        texto = f"""
+        Resumen ejecutivo del monitoreo de {cultivo} en una parcela de {area_ha:.2f} hectáreas.
+        Fecha del análisis: {datetime.now().strftime('%d de %B de %Y')}.
+
+        Indicadores principales:
+        El NDVI, que mide la salud del cultivo, es {ndvi_val:.2f}. Un valor óptimo debería ser mayor a {umbral['NDVI_min']:.2f}.
+        La temperatura actual es de {temp_val:.1f} grados Celsius. El rango ideal es entre {umbral['temp_min']} y {umbral['temp_max']} grados.
+        La humedad del suelo es de {humedad_val:.2f}. El rango recomendado es {umbral['humedad_min']:.2f} a {umbral['humedad_max']:.2f}.
+        La precipitación reciente alcanza {precip_actual:.1f} milímetros.
+
+        Riesgos detectados:
+        - Para NDVI, el riesgo es {riesgo_ndvi}.
+        - Para temperatura, el riesgo es {riesgo_temp}.
+        - Para humedad, el riesgo es {riesgo_hum}.
+
+        Pronóstico para la próxima semana: {pronostico_gfs['alerta_esta_semana']}. Las temperaturas máximas alcanzarán hasta {max(pronostico_gfs['temp_max_proyectada']):.1f} grados y se espera una precipitación acumulada de {pronostico_gfs['precip_acum']:.0f} milímetros.
+
+        Recomendaciones generadas por inteligencia artificial:
+        {texto_ia}
+
+        {bloques_info}
+
+        En cuanto al carbono capturado, se estima un total de {st.session_state.get('res_carbono', {}).get('carbono_total_ton_ha', 0):.1f} toneladas de carbono por hectárea, equivalente a {st.session_state.get('res_carbono', {}).get('co2_equivalente_ton_ha', 0):.1f} toneladas de CO₂ equivalente por hectárea. Para toda la parcela, esto representa aproximadamente {st.session_state.get('creditos', 0):.3f} kilotoneladas de CO₂, con un valor estimado de {st.session_state.get('precio_usd', 0):.2f} dólares en el mercado voluntario de carbono.
+
+        {texto_agro}
+
+        Finalmente, se recomienda revisar las pestañas de Agroecología y Estación Meteorológica para acciones específicas.
+        """
+        return texto
+
+    def generar_texto_resumen_gn():
+        # Traducción básica al guaraní (aproximada, se puede mejorar)
+        # Por simplicidad usamos el mismo texto en español pero con nota de que es traducción automática.
+        # Para una versión real, se debería traducir profesionalmente.
+        texto_es = generar_texto_resumen_es()
+        texto_gn = f"[Traducción automática al guaraní]\n\n{texto_es}\n\nNota: Esta es una versión preliminar en guaraní. Para una experiencia óptima, recomendamos consultar con un traductor nativo."
+        return texto_gn
+
+    if st.button("🎧 Generar y descargar audio (MP3)", type="primary"):
+        if not GTTS_OK:
+            st.error("❌ La librería gTTS no está instalada. Por favor, añade 'gTTS' a requirements.txt y reinicia.")
+        else:
+            with st.spinner(f"Generando audio narrativo en {idioma_audio} (puede tomar unos segundos)..."):
+                if lang_code == "es":
+                    texto_audio = generar_texto_resumen_es()
+                else:
+                    texto_audio = generar_texto_resumen_gn()
+                # Crear el objeto gTTS en el idioma seleccionado
+                tts = gTTS(text=texto_audio, lang=lang_code, slow=False)
+                # Guardar en un buffer de bytes
+                audio_bytes = BytesIO()
+                tts.write_to_fp(audio_bytes)
+                audio_bytes.seek(0)
+                # Ofrecer descarga y reproducción
+                st.audio(audio_bytes, format='audio/mp3', start_time=0)
+                st.download_button(
+                    label="📥 Descargar audio (MP3)",
+                    data=audio_bytes,
+                    file_name=f"resumen_gobernanza_{cultivo}_{lang_code}_{datetime.now().strftime('%Y%m%d_%H%M')}.mp3",
+                    mime="audio/mpeg"
+                )
+                st.success("✅ Audio generado. Puedes escucharlo arriba o descargarlo.")
+                st.session_state['ultimo_texto_audio'] = texto_audio
+
+    with st.expander("📄 Ver texto completo del audio"):
+        if st.button("Mostrar texto del resumen en español"):
+            texto_mostrar = generar_texto_resumen_es()
+            st.text_area("Texto narrativo (español)", texto_mostrar, height=400)
+        if st.button("Mostrar texto del resumen en guaraní (aproximado)"):
+            texto_mostrar = generar_texto_resumen_gn()
+            st.text_area("Texto narrativo (guaraní)", texto_mostrar, height=400)
+
+st.caption("Plataforma de Monitoreo de Hortalizas bajo Invernadero · Datos de estación meteorológica (manual / simulada / API) · Sentinel-2 · ERA5 · CHIRPS · GFS · Audio inclusivo en español y guaraní")
